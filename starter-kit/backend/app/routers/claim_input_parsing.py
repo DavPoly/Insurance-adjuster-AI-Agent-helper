@@ -26,6 +26,7 @@ class ParsedClaimInput:
     description: str
     document: UploadFile | None
     intake_validation: IntakeValidationOut
+    claim_decision: ClaimDecisionOut
 
 
 async def parse_and_validate_claim_input(
@@ -60,6 +61,7 @@ async def parse_and_validate_claim_input(
         description=stripped_description,
         document=document,
         intake_validation=intake_validation,
+        claim_decision=claim_decision,
     )
 
 
