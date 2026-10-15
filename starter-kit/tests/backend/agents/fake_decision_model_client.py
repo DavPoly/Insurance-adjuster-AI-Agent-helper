@@ -1,12 +1,15 @@
 """Shared fake Jev decision client and the answer wire constants for the
-node-1, node-4, deterministic-triage, and router test suites.
+node-1, node-4, and deterministic-triage test suites.
 
-The ``*_FIELD`` keys and the probability bounds mirror the OpenRouter Decisions
+The fake itself is used by those three suites; the router suite reuses the
+``*_FIELD`` constants below but drives its own scripted decision client. The
+``*_FIELD`` keys and the probability bounds mirror the OpenRouter Decisions
 API's answer wire shape, and are re-typed here on purpose: the consuming tests
 assert the literal payload shape, so importing the production
 ``DecisionModelClient``'s private field-name constants instead would make those
 assertions tautological (they would keep passing even if a production key were
-renamed). Keep this the single declaration of those wire literals.
+renamed). The llm transport fixtures deliberately re-declare the same wire field
+names so their request-shape assertions stay independent of this module.
 """
 
 from app.agents.prompts.claim_decision_questions import CHOICE_QUESTION_TYPE

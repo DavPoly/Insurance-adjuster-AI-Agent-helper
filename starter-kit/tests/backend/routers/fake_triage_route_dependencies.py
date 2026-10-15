@@ -1,10 +1,9 @@
 """Router-specific triage fakes built on the shared agents-suite fakes.
 
-Only the pieces the router tests genuinely need live here: a Jev decision client
-that scripts both nodes (node 1's classification and node 4's safety retries) and
-a synthesis chat model that counts its structured-output calls so the tests can
-pin the bounded safety retry. The chat-model, Qdrant, embedder, lookup-table, and
-Jev-answer fakes themselves are imported from the agents suite.
+Only the piece the router tests genuinely need lives here: a Jev decision client
+that scripts both nodes (node 1's classification and node 4's safety retries).
+The chat-model (including the counting synthesis fake), Qdrant, embedder,
+lookup-table, and Jev-answer fakes themselves are imported from the agents suite.
 """
 
 from agents.fake_decision_model_client import (
@@ -14,7 +13,6 @@ from agents.fake_decision_model_client import (
     PASSING_NOUL_PROBABILITY,
     QUESTION_TYPE_FIELD,
 )
-from agents.fake_triage_chat_model import FakeTriageChatModel
 
 from app.agents.prompts.claim_decision_questions import (
     AFFECTED_AREA_QUESTION_ID_PREFIX,
@@ -103,35 +101,3 @@ class FakeDecisionModelClient:
                 else FAILING_NOUL_PROBABILITY
             )
         return PASSING_NOUL_PROBABILITY
-
-
-class CountingTriageChatModel(FakeTriageChatModel):
-    """A shared fake synthesis model that also counts its structured-output calls.
-
-    The router's bounded safety retry re-runs synthesis between attempts, so the
-    tests assert how many times the LLM was invoked.
-    """
-
-    def __init__(
-        self,
-        structured_output_value=None,
-        structured_output_values_by_schema=None,
-    ) -> None:
-        super().__init__(
-            structured_output_value=structured_output_value,
-            structured_output_values_by_schema=structured_output_values_by_schema,
-        )
-        self.structured_output_invoke_count = 0
-
-    def with_structured_output(self, schema):
-        return _CountingStructuredOutputRunnable(super().with_structured_output(schema), self)
-
-
-class _CountingStructuredOutputRunnable:
-    def __init__(self, runnable, owner: CountingTriageChatModel) -> None:
-        self._runnable = runnable
-        self._owner = owner
-
-    def invoke(self, messages):
-        self._owner.structured_output_invoke_count += 1
-        return self._runnable.invoke(messages)

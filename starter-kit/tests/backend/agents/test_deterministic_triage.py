@@ -27,7 +27,6 @@ from deterministic_triage_test_fixtures import (
     POLICY_TYPE_ARGUMENT,
     SEARCH_QUERY_ARGUMENT,
     SEVERITY_ARGUMENT,
-    CountingSynthesisChatModel,
     RecordingTriageEmbedder,
     RecordingTriageQdrantClient,
     all_passing_safety_checks,
@@ -36,6 +35,7 @@ from deterministic_triage_test_fixtures import (
     build_synthesis_draft,
 )
 from fake_decision_model_client import FAILING_NOUL_PROBABILITY, FakeDecisionModelClient
+from fake_triage_chat_model import CountingTriageChatModel
 from fake_triage_lookup_tables import FAKE_COST_TABLE, FAKE_COVERAGE_TABLE
 from fake_triage_qdrant_client import (
     FAKE_SEARCH_CLAIM_ID,
@@ -95,7 +95,7 @@ def _run_pipeline(
 
 def _build_dependencies() -> tuple:
     return (
-        CountingSynthesisChatModel(build_synthesis_draft()),
+        CountingTriageChatModel(build_synthesis_draft()),
         FakeDecisionModelClient(),
         RecordingTriageQdrantClient([FAKE_SEARCH_POINT]),
         RecordingTriageEmbedder(),
@@ -131,7 +131,7 @@ def test_run_deterministic_triage_runs_each_step_once_with_node_1_arguments():
     assert len(qdrant_client.observed_collection_names) == 1
 
     # exactly one synthesis call, and node 4 scored the synthesized free text.
-    assert llm.synthesis_invoke_count == 1
+    assert llm.structured_output_invoke_count == 1
     assert isinstance(decision_client.observed_state, str)
     assert FAKE_SYNTHESIZED_DAMAGE_DESCRIPTION in decision_client.observed_state
     assert FAKE_SYNTHESIZED_RECOMMENDATION in decision_client.observed_state
@@ -252,7 +252,7 @@ def test_run_deterministic_triage_returns_a_failing_safety_result_for_the_router
     decision_client = FakeDecisionModelClient(
         {NO_COVERAGE_PROMISES_QUESTION_ID: FAILING_NOUL_PROBABILITY}
     )
-    llm = CountingSynthesisChatModel(build_synthesis_draft())
+    llm = CountingTriageChatModel(build_synthesis_draft())
 
     result = _run_pipeline(
         build_submission(),

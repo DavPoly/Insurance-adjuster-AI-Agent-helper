@@ -11,9 +11,10 @@ GETs — plus that the optional PDF's text reaches node 1.
 
 from pathlib import Path
 
+from agents.fake_triage_chat_model import CountingTriageChatModel
 from agents.fake_triage_lookup_tables import FAKE_COST_TABLE, FAKE_COVERAGE_TABLE
 from agents.fake_triage_qdrant_client import FakeTriageEmbedder, FakeTriageQdrantClient
-from fake_triage_route_dependencies import CountingTriageChatModel, FakeDecisionModelClient
+from fake_triage_route_dependencies import FakeDecisionModelClient
 from triage_route_test_values import (
     FAKE_CLAIM_DESCRIPTION,
     FAKE_SYNTHESIZED_DAMAGE_DESCRIPTION,
@@ -239,6 +240,9 @@ def test_triage_claim_stores_a_trace_reflecting_the_final_safety_verdict(client)
     # the stored trace shows the retry's passing verdict, not the discarded first pass.
     safety_observation = _observation_following_act(steps, OUTPUT_SAFETY_STEP_NAME)
     assert safety_observation["tool_output"] == _passing_safety_checks().model_dump()
+    # ...and the regenerated synthesis, so a partial fix of only the safety step fails here.
+    synthesis_observation = _observation_following_act(steps, TRIAGE_SYNTHESIS_STEP_NAME)
+    assert synthesis_observation["tool_output"] == response.json()["triage_assessment"]
 
 
 def test_triage_claim_returns_422_when_safety_never_passes(client):

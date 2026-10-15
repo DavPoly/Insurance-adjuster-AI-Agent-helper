@@ -6,7 +6,6 @@ node 1 derived. The lookup tables and the canned search hit are reused as-is
 from the sibling fixture modules.
 """
 
-from fake_triage_chat_model import FakeTriageChatModel
 from fake_triage_lookup_tables import (
     FAKE_STANDARD_HOMEOWNER_DEDUCTIBLE,
     FAKE_STANDARD_HOMEOWNER_MAX_PAYOUT,
@@ -130,27 +129,6 @@ def all_passing_safety_checks() -> SafetyChecksOut:
         no_liability_determination=True,
         no_emotional_language=True,
     )
-
-
-class CountingSynthesisChatModel(FakeTriageChatModel):
-    """A fake chat model that also counts how often synthesis invokes the LLM."""
-
-    def __init__(self, structured_output_value) -> None:
-        super().__init__(structured_output_value=structured_output_value)
-        self.synthesis_invoke_count = 0
-
-    def with_structured_output(self, schema):
-        return _CountingStructuredOutputRunnable(super().with_structured_output(schema), self)
-
-
-class _CountingStructuredOutputRunnable:
-    def __init__(self, runnable, owner: CountingSynthesisChatModel) -> None:
-        self._runnable = runnable
-        self._owner = owner
-
-    def invoke(self, messages):
-        self._owner.synthesis_invoke_count += 1
-        return self._runnable.invoke(messages)
 
 
 class RecordingTriageEmbedder(FakeTriageEmbedder):
