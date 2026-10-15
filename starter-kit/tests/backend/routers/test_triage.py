@@ -140,6 +140,13 @@ def _posted_trace_act_step_names(client, response) -> list[str]:
     return [step["tool_name"] for step in steps if step["type"] == ACT_STEP_TYPE]
 
 
+def _observation_following_act(steps: list[dict], tool_name: str) -> dict:
+    act_index = next(
+        index for index, step in enumerate(steps) if step.get("tool_name") == tool_name
+    )
+    return steps[act_index + 1]
+
+
 def test_triage_claim_returns_400_when_no_image_or_description(client):
     response = client.post("/api/v1/claims/triage", data={})
 
@@ -219,6 +226,24 @@ def test_triage_claim_returns_200_when_safety_passes_on_the_first_retry(client):
     assert decision_client.safety_call_count == 2
     # the bounded retry regenerated the draft from the carried inputs before re-checking.
     assert llm.structured_output_invoke_count == 2
+
+
+def test_triage_claim_stores_a_trace_reflecting_the_final_safety_verdict(client):
+    decision_client = FakeDecisionModelClient(
+        safety_check_attempts=(_failing_safety_checks(), _passing_safety_checks())
+    )
+    _override_dependencies(_build_synthesis_chat_model(), TriageReportStore(), decision_client)
+
+    response = client.post("/api/v1/claims/triage", data={"description": FAKE_CLAIM_DESCRIPTION})
+    claim_id = response.json()["claim_id"]
+    steps = client.get(f"/api/v1/agent/trace/{claim_id}").json()["steps"]
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["safety_checks"] == _passing_safety_checks().model_dump()
+    # the stored trace shows the retry's passing verdict, not the discarded first pass.
+    safety_observation = _observation_following_act(steps, OUTPUT_SAFETY_STEP_NAME)
+    assert safety_observation["tool_output"] == _passing_safety_checks().model_dump()
 
 
 def test_triage_claim_returns_422_when_safety_never_passes(client):

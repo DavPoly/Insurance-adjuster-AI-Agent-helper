@@ -13,8 +13,8 @@ Every step is recorded as a :class:`DeterministicStepRecord` so the trace
 endpoint can rebuild the reason/act/observe history from the pipeline itself
 rather than from any ReAct message list. The bounded safety retry lives in the
 router: it reuses the first pass's ``safety_checks`` and, on failure, re-runs
-synthesis from the carried classification and tool results before re-checking
-safety.
+synthesis from the carried claim context, classification, and tool results before
+re-checking safety.
 """
 
 import json

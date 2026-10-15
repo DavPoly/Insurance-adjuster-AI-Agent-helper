@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 
@@ -14,6 +15,10 @@ from app.agents.deterministic_triage import (
 from app.agents.safety_decision import check_output_safety
 from app.agents.schemas.safety_checks_schema import SafetyChecksOut
 from app.agents.triage_synthesis import synthesize_triage_assessment
+from app.constants.agent.deterministic_pipeline_step_names import (
+    OUTPUT_SAFETY_STEP_NAME,
+    TRIAGE_SYNTHESIS_STEP_NAME,
+)
 from app.constants.agent.safety_check_retry_limits import MAX_SAFETY_CHECK_ATTEMPTS
 from app.constants.agent.triage_assessment_field_names import (
     DAMAGE_DESCRIPTION_FIELD,
@@ -121,7 +126,11 @@ async def triage_claim(
         safety_checks=safety_checks,
     )
     trace = AgentTraceOut(
-        claim_id=claim_id, steps=result.trace_steps, total_duration_ms=total_duration_ms
+        claim_id=claim_id,
+        steps=_trace_steps_reflecting_final_outcome(
+            result.trace_steps, triage_assessment, safety_checks
+        ),
+        total_duration_ms=total_duration_ms,
     )
     store.save(claim_id, response.model_dump(), trace.model_dump())
     return response
@@ -135,8 +144,9 @@ async def _resolve_safe_triage_assessment(
     """Keep the first pass's assessment unless node 4 fails, then regenerate in place.
 
     The pipeline has already run node 4 once, so its verdict seeds the loop; on
-    failure the router regenerates from the carried classification and tool results
-    and re-checks with node 4, bounded by ``MAX_SAFETY_CHECK_ATTEMPTS``.
+    failure the router regenerates from the carried claim context, classification,
+    and tool results and re-checks with node 4, bounded by
+    ``MAX_SAFETY_CHECK_ATTEMPTS``.
     """
     triage_assessment = result.triage_assessment
     safety_checks = result.safety_checks
@@ -159,6 +169,33 @@ async def _resolve_safe_triage_assessment(
         attempt += 1
 
     return triage_assessment, safety_checks
+
+
+def _trace_steps_reflecting_final_outcome(
+    trace_steps: list[dict],
+    triage_assessment: dict,
+    safety_checks: SafetyChecksOut,
+) -> list[dict]:
+    """Rewrite the pipeline trace's synthesis and safety observations to the final outcome.
+
+    The pipeline builds its trace from the first pass, but the bounded safety retry
+    above can regenerate the draft; storing that trace as-is would show the
+    discarded first pass. This updates the two affected observations so the stored
+    trace matches the returned assessment and safety verdict.
+    """
+    steps = [dict(step) for step in trace_steps]
+    _set_traced_observation(steps, TRIAGE_SYNTHESIS_STEP_NAME, triage_assessment)
+    _set_traced_observation(steps, OUTPUT_SAFETY_STEP_NAME, safety_checks.model_dump())
+    return steps
+
+
+def _set_traced_observation(steps: list[dict], tool_name: str, tool_output: object) -> None:
+    act_index = next(
+        index for index, step in enumerate(steps) if step.get("tool_name") == tool_name
+    )
+    observation = steps[act_index + 1]
+    observation["content"] = json.dumps(tool_output, default=str)
+    observation["tool_output"] = tool_output
 
 
 @router.get(
