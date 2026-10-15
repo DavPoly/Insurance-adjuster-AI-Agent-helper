@@ -1,66 +1,84 @@
+"""Synthesis seam: one LLM call over the explicit classification and tool results.
+
+The deterministic orchestrator passes node 1's classification and the three
+deterministic tool results explicitly instead of a ReAct message history. This
+module renders that input for the single structured-output call and then stitches
+the deterministic fields (``damage_type`` / ``severity`` / ``affected_areas``,
+cost, and past claims) verbatim over the LLM's free text.
+"""
+
 import json
+from dataclasses import dataclass
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.prompts.triage_synthesis_prompt import TRIAGE_SYNTHESIS_SYSTEM_PROMPT
+from app.agents.schemas.claim_decision_schema import ClaimDecisionOut
 from app.agents.schemas.triage_assessment_schema import TriageAssessmentOut
 from app.constants.agent.triage_tool_names import (
+    CHECK_COVERAGE_TOOL_NAME,
     ESTIMATE_REPAIR_COST_TOOL_NAME,
     SEARCH_PAST_CLAIMS_TOOL_NAME,
 )
 from app.constants.tools.cost_estimate_currency import DEFAULT_CURRENCY
 
+_CLASSIFICATION_CONTEXT_KEY = "claim_classification"
 
-def synthesize_triage_assessment(llm: BaseChatModel, messages: list[BaseMessage]) -> dict:
-    """One LLM call over the full ReAct trace that writes the final triage report."""
-    synthesis_messages = [
-        SystemMessage(content=TRIAGE_SYNTHESIS_SYSTEM_PROMPT),
-        *messages[1:],
-    ]
+
+@dataclass(frozen=True)
+class SynthesisToolResults:
+    """The deterministic tool outputs the synthesis call grounds and stitches.
+
+    ``repair_cost_estimate`` is ``estimate_repair_cost``'s result,
+    ``similar_past_claims`` is ``search_past_claims``'s ordered result list, and
+    ``coverage`` is ``check_coverage``'s result.
+    """
+
+    repair_cost_estimate: dict
+    similar_past_claims: list[dict]
+    coverage: dict
+
+
+def synthesize_triage_assessment(
+    llm: BaseChatModel,
+    classification: ClaimDecisionOut,
+    tool_results: SynthesisToolResults,
+) -> dict:
+    """One LLM call over the explicit classification and tool results."""
     structured_llm = llm.with_structured_output(TriageAssessmentOut)
-    draft: TriageAssessmentOut = structured_llm.invoke(synthesis_messages)
+    draft: TriageAssessmentOut = structured_llm.invoke(
+        [
+            SystemMessage(content=TRIAGE_SYNTHESIS_SYSTEM_PROMPT),
+            HumanMessage(content=_render_synthesis_input(classification, tool_results)),
+        ]
+    )
     assessment = draft.model_dump(mode="json")
 
-    repair_cost_call = _last_tool_call(messages, ESTIMATE_REPAIR_COST_TOOL_NAME)
-    if repair_cost_call is not None:
-        arguments, observation = repair_cost_call
-        assessment["damage_type"] = arguments["damage_type"]
-        assessment["severity"] = arguments["severity"]
-        assessment["affected_areas"] = arguments["affected_areas"]
-        assessment["estimated_repair_cost"] = observation
-
-    past_claims_observation = _last_tool_observation(messages, SEARCH_PAST_CLAIMS_TOOL_NAME)
-    if past_claims_observation is not None:
-        assessment["similar_past_claims"] = _apply_verbatim_past_claims(
-            past_claims_observation, draft.similar_past_claims
-        )
+    assessment["damage_type"] = classification.damage_type.value
+    assessment["severity"] = classification.severity.value
+    assessment["affected_areas"] = list(classification.affected_areas)
+    assessment["estimated_repair_cost"] = tool_results.repair_cost_estimate
+    assessment["similar_past_claims"] = _apply_verbatim_past_claims(
+        tool_results.similar_past_claims, draft.similar_past_claims
+    )
 
     return assessment
 
 
-def _last_tool_observation(messages: list[BaseMessage], tool_name: str):
-    for message in reversed(messages):
-        if isinstance(message, ToolMessage) and message.name == tool_name:
-            return json.loads(message.content)
-    return None
-
-
-def _last_tool_call(messages: list[BaseMessage], tool_name: str):
-    tool_messages_by_call_id = {
-        message.tool_call_id: message for message in messages if isinstance(message, ToolMessage)
-    }
-    for message in reversed(messages):
-        if not isinstance(message, AIMessage):
-            continue
-        for tool_call in reversed(message.tool_calls):
-            if tool_call["name"] != tool_name:
-                continue
-            tool_message = tool_messages_by_call_id.get(tool_call["id"])
-            if tool_message is None:
-                continue
-            return tool_call["args"], json.loads(tool_message.content)
-    return None
+def _render_synthesis_input(
+    classification: ClaimDecisionOut, tool_results: SynthesisToolResults
+) -> str:
+    """Render the explicit inputs as the single synthesis message the LLM reads."""
+    return json.dumps(
+        {
+            _CLASSIFICATION_CONTEXT_KEY: classification.model_dump(mode="json"),
+            ESTIMATE_REPAIR_COST_TOOL_NAME: tool_results.repair_cost_estimate,
+            SEARCH_PAST_CLAIMS_TOOL_NAME: tool_results.similar_past_claims,
+            CHECK_COVERAGE_TOOL_NAME: tool_results.coverage,
+        },
+        indent=2,
+    )
 
 
 def _apply_verbatim_past_claims(raw_records: list[dict], drafted_claims: list) -> list[dict]:

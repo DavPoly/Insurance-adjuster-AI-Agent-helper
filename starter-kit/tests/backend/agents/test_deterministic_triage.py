@@ -154,6 +154,15 @@ def test_run_deterministic_triage_runs_each_step_once_with_node_1_arguments():
         }
     ]
     assert result.safety_checks == all_passing_safety_checks()
+    # the carried explicit synthesis inputs mirror node 1 and the tool results.
+    assert result.classification == claim_decision
+    assert result.tool_results.repair_cost_estimate == {
+        "min": EXPECTED_REPAIR_COST_MIN,
+        "max": EXPECTED_REPAIR_COST_MAX,
+        "currency": DEFAULT_CURRENCY,
+    }
+    assert result.tool_results.similar_past_claims == EXPECTED_PAST_CLAIMS_RESULT
+    assert result.tool_results.coverage == EXPECTED_COVERAGE_RESULT
 
 
 def test_run_deterministic_triage_records_reason_act_observe_per_step():
@@ -255,8 +264,11 @@ def test_run_deterministic_triage_returns_a_failing_safety_result_for_the_router
 
     assert safety_checks_passed(result.safety_checks) is False
     assert result.safety_checks.no_coverage_promises is False
-    # The router's bounded retry regenerates from the carried synthesis input.
-    assert synthesize_triage_assessment(llm, result.synthesis_messages) == result.triage_assessment
+    # The router's bounded retry regenerates from the carried explicit inputs.
+    assert (
+        synthesize_triage_assessment(llm, result.classification, result.tool_results)
+        == result.triage_assessment
+    )
 
 
 def test_safety_checks_passed_requires_every_check():

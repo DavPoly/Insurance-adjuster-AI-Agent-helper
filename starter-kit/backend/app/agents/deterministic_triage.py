@@ -13,7 +13,8 @@ Every step is recorded as a :class:`DeterministicStepRecord` so the trace
 endpoint can rebuild the reason/act/observe history from the pipeline itself
 rather than from any ReAct message list. The bounded safety retry lives in the
 router: it reuses the first pass's ``safety_checks`` and, on failure, re-runs
-synthesis over the carried ``synthesis_messages`` before re-checking safety.
+synthesis from the carried classification and tool results before re-checking
+safety.
 """
 
 import json
@@ -22,21 +23,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolMessage,
-)
 from qdrant_client import QdrantClient
 
-from app.agents.prompts.triage_synthesis_prompt import TRIAGE_SYNTHESIS_SYSTEM_PROMPT
 from app.agents.safety_decision import check_output_safety
 from app.agents.schemas.claim_decision_schema import ClaimDecisionOut
 from app.agents.schemas.claim_submission import ClaimSubmission
 from app.agents.schemas.safety_checks_schema import SafetyChecksOut
-from app.agents.triage_synthesis import synthesize_triage_assessment
+from app.agents.triage_synthesis import SynthesisToolResults, synthesize_triage_assessment
 from app.agents.utils.triage_agent_trace import (
     DeterministicStepRecord,
     build_deterministic_trace_steps,
@@ -85,33 +78,21 @@ _INCIDENT_CATEGORY_INPUT_KEY = "incident_category"
 _DAMAGE_DESCRIPTION_KEY = "damage_description"
 _RECOMMENDATION_KEY = "recommendation"
 
-_ESTIMATE_REPAIR_COST_TOOL_CALL_ID = "estimate_repair_cost_call"
-_SEARCH_PAST_CLAIMS_TOOL_CALL_ID = "search_past_claims_call"
-_CHECK_COVERAGE_TOOL_CALL_ID = "check_coverage_call"
-
-_POLICY_TYPE_CONTEXT_LABEL = "Policy type"
-_DESCRIPTION_CONTEXT_LABEL = "Claimant description"
-_DOCUMENT_TEXT_CONTEXT_LABEL = "Supporting document text"
-_DAMAGE_TYPE_CONTEXT_LABEL = "Extracted damage type"
-_SEVERITY_CONTEXT_LABEL = "Extracted severity"
-_AFFECTED_AREAS_CONTEXT_LABEL = "Extracted affected areas"
-_NO_DESCRIPTION_PLACEHOLDER = "(none provided)"
-_NO_AFFECTED_AREAS_PLACEHOLDER = "(none detected)"
-
 
 @dataclass
 class DeterministicTriageResult:
     """Everything the triage route consumes from one deterministic run.
 
-    ``synthesis_messages`` carries the inline-built synthesis input so the
-    router's bounded safety retry can regenerate the draft without rerunning the
+    ``classification`` and ``tool_results`` carry the explicit synthesis inputs so
+    the router's bounded safety retry can regenerate the draft without rerunning the
     deterministic tools — the analogue of the retired agent's ``messages``.
     """
 
     triage_assessment: dict
     safety_checks: SafetyChecksOut
     trace_steps: list[dict]
-    synthesis_messages: list[BaseMessage]
+    classification: ClaimDecisionOut
+    tool_results: SynthesisToolResults
 
 
 async def run_deterministic_triage(
@@ -147,10 +128,12 @@ async def run_deterministic_triage(
         coverage["covered"],
     )
 
-    synthesis_messages = _build_synthesis_messages(
-        submission, claim_decision, repair_cost_estimate, past_claims, coverage
+    tool_results = SynthesisToolResults(
+        repair_cost_estimate=repair_cost_estimate,
+        similar_past_claims=past_claims,
+        coverage=coverage,
     )
-    triage_assessment = synthesize_triage_assessment(llm, synthesis_messages)
+    triage_assessment = synthesize_triage_assessment(llm, claim_decision, tool_results)
 
     safety_checks = await check_output_safety(
         decision_client,
@@ -176,7 +159,8 @@ async def run_deterministic_triage(
         triage_assessment=triage_assessment,
         safety_checks=safety_checks,
         trace_steps=trace_steps,
-        synthesis_messages=synthesis_messages,
+        classification=claim_decision,
+        tool_results=tool_results,
     )
 
 
@@ -220,76 +204,6 @@ def _build_trace_records(
         _act_record(OUTPUT_SAFETY_STEP_NAME),
         _observe_record(safety_checks.model_dump()),
     ]
-
-
-def _build_synthesis_messages(
-    submission: ClaimSubmission,
-    claim_decision: ClaimDecisionOut,
-    repair_cost_estimate: dict,
-    past_claims: list[dict],
-    coverage: dict,
-) -> list[BaseMessage]:
-    """Assemble the synthesis input inline, in the shape ``triage_synthesis`` reads.
-
-    The first entry is discarded by ``synthesize_triage_assessment`` (it prepends
-    its own system prompt); the trailing tool call/result messages carry the
-    deterministic outputs the synthesis step stitches back verbatim.
-    """
-    return [
-        SystemMessage(content=TRIAGE_SYNTHESIS_SYSTEM_PROMPT),
-        HumanMessage(content=_build_synthesis_claim_context(submission, claim_decision)),
-        AIMessage(
-            content=_TRIAGE_SYNTHESIS_REASON,
-            tool_calls=[
-                {
-                    "name": ESTIMATE_REPAIR_COST_TOOL_NAME,
-                    "args": _estimate_repair_cost_arguments(claim_decision),
-                    "id": _ESTIMATE_REPAIR_COST_TOOL_CALL_ID,
-                },
-                {
-                    "name": SEARCH_PAST_CLAIMS_TOOL_NAME,
-                    "args": {_SEARCH_QUERY_INPUT_KEY: submission.description},
-                    "id": _SEARCH_PAST_CLAIMS_TOOL_CALL_ID,
-                },
-                {
-                    "name": CHECK_COVERAGE_TOOL_NAME,
-                    "args": _check_coverage_arguments(submission, claim_decision),
-                    "id": _CHECK_COVERAGE_TOOL_CALL_ID,
-                },
-            ],
-        ),
-        ToolMessage(
-            content=json.dumps(repair_cost_estimate),
-            tool_call_id=_ESTIMATE_REPAIR_COST_TOOL_CALL_ID,
-            name=ESTIMATE_REPAIR_COST_TOOL_NAME,
-        ),
-        ToolMessage(
-            content=json.dumps(past_claims),
-            tool_call_id=_SEARCH_PAST_CLAIMS_TOOL_CALL_ID,
-            name=SEARCH_PAST_CLAIMS_TOOL_NAME,
-        ),
-        ToolMessage(
-            content=json.dumps(coverage),
-            tool_call_id=_CHECK_COVERAGE_TOOL_CALL_ID,
-            name=CHECK_COVERAGE_TOOL_NAME,
-        ),
-    ]
-
-
-def _build_synthesis_claim_context(
-    submission: ClaimSubmission, claim_decision: ClaimDecisionOut
-) -> str:
-    parts = [
-        f"{_POLICY_TYPE_CONTEXT_LABEL}: {submission.policy_type.value}",
-        f"{_DESCRIPTION_CONTEXT_LABEL}: {submission.description or _NO_DESCRIPTION_PLACEHOLDER}",
-    ]
-    if submission.document_text:
-        parts.append(f"{_DOCUMENT_TEXT_CONTEXT_LABEL}:\n{submission.document_text}")
-    parts.append(f"{_DAMAGE_TYPE_CONTEXT_LABEL}: {claim_decision.damage_type.value}")
-    parts.append(f"{_SEVERITY_CONTEXT_LABEL}: {claim_decision.severity.value}")
-    affected_areas = ", ".join(claim_decision.affected_areas) or _NO_AFFECTED_AREAS_PLACEHOLDER
-    parts.append(f"{_AFFECTED_AREAS_CONTEXT_LABEL}: {affected_areas}")
-    return "\n\n".join(parts)
 
 
 def _estimate_repair_cost_arguments(claim_decision: ClaimDecisionOut) -> dict:

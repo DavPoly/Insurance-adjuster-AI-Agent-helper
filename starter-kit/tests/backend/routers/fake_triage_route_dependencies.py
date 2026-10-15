@@ -106,6 +106,7 @@ class FakeTriageChatModel:
         self._call_index = 0
         self._structured_output_value = structured_output_value
         self._structured_output_values_by_schema = structured_output_values_by_schema or {}
+        self.structured_output_invoke_count = 0
 
     def bind_tools(self, tools):
         return self
@@ -117,14 +118,16 @@ class FakeTriageChatModel:
 
     def with_structured_output(self, schema):
         value = self._structured_output_values_by_schema.get(schema, self._structured_output_value)
-        return _FakeStructuredOutputRunnable(value)
+        return _FakeStructuredOutputRunnable(value, self)
 
 
 class _FakeStructuredOutputRunnable:
-    def __init__(self, value):
+    def __init__(self, value, owner: FakeTriageChatModel):
         self._value = value
+        self._owner = owner
 
     def invoke(self, messages):
+        self._owner.structured_output_invoke_count += 1
         return self._value
 
 

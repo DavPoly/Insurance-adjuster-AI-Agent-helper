@@ -208,7 +208,8 @@ def test_triage_claim_returns_200_when_safety_passes_on_the_first_retry(client):
     decision_client = FakeDecisionModelClient(
         safety_check_attempts=(_failing_safety_checks(), _passing_safety_checks())
     )
-    _override_dependencies(_build_synthesis_chat_model(), TriageReportStore(), decision_client)
+    llm = _build_synthesis_chat_model()
+    _override_dependencies(llm, TriageReportStore(), decision_client)
 
     response = client.post("/api/v1/claims/triage", data={"description": FAKE_CLAIM_DESCRIPTION})
     app.dependency_overrides.clear()
@@ -216,11 +217,14 @@ def test_triage_claim_returns_200_when_safety_passes_on_the_first_retry(client):
     assert response.status_code == 200
     assert response.json()["safety_checks"] == _passing_safety_checks().model_dump()
     assert decision_client.safety_call_count == 2
+    # the bounded retry regenerated the draft from the carried inputs before re-checking.
+    assert llm.structured_output_invoke_count == 2
 
 
 def test_triage_claim_returns_422_when_safety_never_passes(client):
     decision_client = FakeDecisionModelClient(safety_check_attempts=(_failing_safety_checks(),))
-    _override_dependencies(_build_synthesis_chat_model(), TriageReportStore(), decision_client)
+    llm = _build_synthesis_chat_model()
+    _override_dependencies(llm, TriageReportStore(), decision_client)
 
     response = client.post("/api/v1/claims/triage", data={"description": FAKE_CLAIM_DESCRIPTION})
     app.dependency_overrides.clear()
@@ -230,6 +234,7 @@ def test_triage_claim_returns_422_when_safety_never_passes(client):
     assert body["error"] == SAFETY_CHECK_FAILED_ERROR_CODE
     assert body["safety_checks"] == _failing_safety_checks().model_dump()
     assert decision_client.safety_call_count == MAX_SAFETY_CHECK_ATTEMPTS
+    assert llm.structured_output_invoke_count == MAX_SAFETY_CHECK_ATTEMPTS
 
 
 def test_triage_claim_then_get_report_and_trace_roundtrip(client):

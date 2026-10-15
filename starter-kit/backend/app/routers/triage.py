@@ -144,8 +144,8 @@ async def _resolve_safe_triage_assessment(
     """Keep the first pass's assessment unless node 4 fails, then regenerate in place.
 
     The pipeline has already run node 4 once, so its verdict seeds the loop; on
-    failure the router regenerates over the carried synthesis input and re-checks
-    with node 4, bounded by ``MAX_SAFETY_CHECK_ATTEMPTS``.
+    failure the router regenerates from the carried classification and tool results
+    and re-checks with node 4, bounded by ``MAX_SAFETY_CHECK_ATTEMPTS``.
     """
     triage_assessment = result.triage_assessment
     safety_checks = result.safety_checks
@@ -157,7 +157,9 @@ async def _resolve_safe_triage_assessment(
             attempt,
             MAX_SAFETY_CHECK_ATTEMPTS,
         )
-        triage_assessment = synthesize_triage_assessment(llm, result.synthesis_messages)
+        triage_assessment = synthesize_triage_assessment(
+            llm, result.classification, result.tool_results
+        )
         safety_checks = await check_output_safety(
             decision_client,
             triage_assessment[_DAMAGE_DESCRIPTION_ASSESSMENT_KEY],
