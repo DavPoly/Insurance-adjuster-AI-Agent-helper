@@ -18,8 +18,7 @@ from app.agents.prompts.safety_decision_questions import (
     SAFETY_DECISION_QUESTIONS,
 )
 from app.agents.schemas.safety_checks_schema import SafetyChecksOut
-from app.constants.decision.decision_model_config import DECISION_PROBABILITY_THRESHOLD
-from app.llm.decision_model_client import DecisionModelClient, noul_probability
+from app.llm.decision_model_client import DecisionModelClient, noul_answer_is_yes
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +35,13 @@ async def check_output_safety(
     state = _build_safety_review_state(damage_description, recommendation)
     answers = await client.decide(state, SAFETY_DECISION_QUESTIONS)
     safety_checks = SafetyChecksOut(
-        no_coverage_promises=_noul_holds(answers, NO_COVERAGE_PROMISES_QUESTION_ID),
-        no_legal_advice=_noul_holds(answers, NO_LEGAL_ADVICE_QUESTION_ID),
-        no_settlement_amounts=_noul_holds(answers, NO_SETTLEMENT_AMOUNTS_QUESTION_ID),
-        no_liability_determination=_noul_holds(answers, NO_LIABILITY_DETERMINATION_QUESTION_ID),
-        no_emotional_language=_noul_holds(answers, NO_EMOTIONAL_LANGUAGE_QUESTION_ID),
+        no_coverage_promises=noul_answer_is_yes(answers, NO_COVERAGE_PROMISES_QUESTION_ID),
+        no_legal_advice=noul_answer_is_yes(answers, NO_LEGAL_ADVICE_QUESTION_ID),
+        no_settlement_amounts=noul_answer_is_yes(answers, NO_SETTLEMENT_AMOUNTS_QUESTION_ID),
+        no_liability_determination=noul_answer_is_yes(
+            answers, NO_LIABILITY_DETERMINATION_QUESTION_ID
+        ),
+        no_emotional_language=noul_answer_is_yes(answers, NO_EMOTIONAL_LANGUAGE_QUESTION_ID),
     )
     logger.debug("Output safety checks: %s", safety_checks.model_dump())
     return safety_checks
@@ -51,7 +52,3 @@ def _build_safety_review_state(damage_description: str, recommendation: str) -> 
         f"{_DAMAGE_DESCRIPTION_STATE_LABEL}: {damage_description}\n\n"
         f"{_RECOMMENDATION_STATE_LABEL}: {recommendation}"
     )
-
-
-def _noul_holds(answers: dict[str, dict], question_id: str) -> bool:
-    return noul_probability(answers[question_id]) >= DECISION_PROBABILITY_THRESHOLD

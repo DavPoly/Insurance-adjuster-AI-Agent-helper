@@ -26,7 +26,6 @@ from app.agents.schemas.claim_decision_schema import ClaimDecisionOut
 from app.agents.schemas.claim_submission import ClaimSubmission
 from app.constants.claims.affected_area_vocabulary import AFFECTED_AREA_VOCABULARY
 from app.constants.claims.claim_taxonomy import DamageType, SeverityLevel
-from app.constants.decision.decision_model_config import DECISION_PROBABILITY_THRESHOLD
 from app.constants.intake.intake_validation_messages import (
     IMAGE_NOT_CLEAR_MESSAGE,
     MISSING_INPUT_MESSAGE,
@@ -34,7 +33,11 @@ from app.constants.intake.intake_validation_messages import (
     OFFENSIVE_CONTENT_MESSAGE,
     PII_DETECTED_MESSAGE,
 )
-from app.llm.decision_model_client import DecisionModelClient, choice_label, noul_probability
+from app.llm.decision_model_client import (
+    DecisionModelClient,
+    choice_label,
+    noul_answer_is_yes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +62,18 @@ async def decide_claim(
     state = _build_claim_state(submission)
     answers = await client.decide(state, CLAIM_DECISION_QUESTIONS)
     decision = ClaimDecisionOut(
-        is_property_damage=_noul_holds(answers, IS_PROPERTY_DAMAGE_QUESTION_ID),
+        is_property_damage=noul_answer_is_yes(answers, IS_PROPERTY_DAMAGE_QUESTION_ID),
         is_valid_image=(
-            _noul_holds(answers, IS_VALID_IMAGE_QUESTION_ID) if submission.image_data_urls else None
+            noul_answer_is_yes(answers, IS_VALID_IMAGE_QUESTION_ID)
+            if submission.image_data_urls
+            else None
         ),
-        no_pii_detected=_noul_holds(answers, NO_PII_DETECTED_QUESTION_ID),
-        no_offensive_content=_noul_holds(answers, NO_OFFENSIVE_CONTENT_QUESTION_ID),
-        damage_type=DamageType(choice_label(answers[DAMAGE_TYPE_QUESTION_ID])),
-        severity=SeverityLevel(choice_label(answers[SEVERITY_QUESTION_ID])),
+        no_pii_detected=noul_answer_is_yes(answers, NO_PII_DETECTED_QUESTION_ID),
+        no_offensive_content=noul_answer_is_yes(answers, NO_OFFENSIVE_CONTENT_QUESTION_ID),
+        damage_type=DamageType(
+            choice_label(answers[DAMAGE_TYPE_QUESTION_ID], DAMAGE_TYPE_QUESTION_ID)
+        ),
+        severity=SeverityLevel(choice_label(answers[SEVERITY_QUESTION_ID], SEVERITY_QUESTION_ID)),
         affected_areas=_extract_affected_areas(answers),
     )
     logger.debug("Claim decision: %s", decision.model_dump())
@@ -122,12 +129,8 @@ def _extract_affected_areas(answers: dict[str, dict]) -> list[str]:
     return [
         area
         for area in AFFECTED_AREA_VOCABULARY
-        if _noul_holds(answers, affected_area_question_id(area))
+        if noul_answer_is_yes(answers, affected_area_question_id(area))
     ]
-
-
-def _noul_holds(answers: dict[str, dict], question_id: str) -> bool:
-    return noul_probability(answers[question_id]) >= DECISION_PROBABILITY_THRESHOLD
 
 
 def _missing_input_decision() -> ClaimDecisionOut:

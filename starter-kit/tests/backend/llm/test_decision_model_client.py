@@ -7,7 +7,12 @@ from app.constants.decision.decision_model_config import (
     DECISION_ENDPOINT_DEFAULT,
     DECISION_MODEL_DEFAULT,
 )
-from app.llm.decision_model_client import DecisionModelClient, choice_label, noul_probability
+from app.llm.decision_model_client import (
+    DecisionModelClient,
+    choice_label,
+    noul_answer_is_yes,
+    noul_probability,
+)
 from llm.fake_decision_model_client_fixtures import (
     AUTHORIZATION_HEADER,
     CONTENT_TYPE_HEADER,
@@ -20,14 +25,22 @@ from llm.fake_decision_model_client_fixtures import (
     FAKE_DECISION_ENDPOINT,
     FAKE_DECISION_MODEL,
     FAKE_ERROR_RESPONSE_BODY,
+    FAKE_MISSING_CHOICE_ANSWERS,
+    FAKE_MISSING_PROBABILITY_ANSWERS,
+    FAKE_NON_NUMERIC_PROBABILITY_ANSWERS,
     FAKE_NON_SUCCESS_STATUS_CODE,
     FAKE_NOUL_PROBABILITY,
+    FAKE_NULL_CHOICE_ANSWERS,
+    FAKE_NULL_PROBABILITY_ANSWERS,
     FAKE_OPENROUTER_API_KEY,
     FAKE_PROPERTY_DAMAGE_QUESTION_ID,
     FAKE_QUESTIONS,
     FAKE_SUCCESS_RESPONSE_BODY,
+    FAKE_UNANSWERED_QUESTION_ID,
     JSON_CONTENT_TYPE,
+    JUST_BELOW_THRESHOLD_PROBABILITY,
     MODEL_REQUEST_FIELD,
+    NOUL_ANSWER_FIELD,
     QUESTIONS_REQUEST_FIELD,
     STATE_REQUEST_FIELD,
     RecordingDecisionTransport,
@@ -111,3 +124,46 @@ def test_choice_label_reads_the_choice_field():
     answer = FAKE_ANSWERS[FAKE_DAMAGE_TYPE_QUESTION_ID]
 
     assert choice_label(answer) == FAKE_CHOICE_LABEL
+
+
+def test_noul_answer_is_yes_thresholds_the_named_question():
+    assert noul_answer_is_yes(FAKE_ANSWERS, FAKE_PROPERTY_DAMAGE_QUESTION_ID) is True
+
+    below_threshold = {FAKE_PROPERTY_DAMAGE_QUESTION_ID: {"noul": JUST_BELOW_THRESHOLD_PROBABILITY}}
+    assert noul_answer_is_yes(below_threshold, FAKE_PROPERTY_DAMAGE_QUESTION_ID) is False
+
+
+def test_noul_answer_is_yes_names_a_question_the_model_left_unanswered():
+    with pytest.raises(ValueError, match=FAKE_UNANSWERED_QUESTION_ID):
+        noul_answer_is_yes(FAKE_ANSWERS, FAKE_UNANSWERED_QUESTION_ID)
+
+
+def test_noul_answer_is_yes_rejects_a_null_probability():
+    with pytest.raises(ValueError, match=FAKE_PROPERTY_DAMAGE_QUESTION_ID):
+        noul_answer_is_yes(FAKE_NULL_PROBABILITY_ANSWERS, FAKE_PROPERTY_DAMAGE_QUESTION_ID)
+
+
+def test_noul_answer_is_yes_rejects_a_non_numeric_probability():
+    with pytest.raises(ValueError, match=FAKE_PROPERTY_DAMAGE_QUESTION_ID):
+        noul_answer_is_yes(FAKE_NON_NUMERIC_PROBABILITY_ANSWERS, FAKE_PROPERTY_DAMAGE_QUESTION_ID)
+
+
+def test_noul_probability_rejects_a_missing_noul_field():
+    answer = FAKE_MISSING_PROBABILITY_ANSWERS[FAKE_PROPERTY_DAMAGE_QUESTION_ID]
+
+    with pytest.raises(ValueError, match=NOUL_ANSWER_FIELD):
+        noul_probability(answer, FAKE_PROPERTY_DAMAGE_QUESTION_ID)
+
+
+def test_choice_label_rejects_a_null_label():
+    answer = FAKE_NULL_CHOICE_ANSWERS[FAKE_DAMAGE_TYPE_QUESTION_ID]
+
+    with pytest.raises(ValueError, match=FAKE_DAMAGE_TYPE_QUESTION_ID):
+        choice_label(answer, FAKE_DAMAGE_TYPE_QUESTION_ID)
+
+
+def test_choice_label_rejects_a_missing_choice_field():
+    answer = FAKE_MISSING_CHOICE_ANSWERS[FAKE_DAMAGE_TYPE_QUESTION_ID]
+
+    with pytest.raises(ValueError, match=FAKE_DAMAGE_TYPE_QUESTION_ID):
+        choice_label(answer, FAKE_DAMAGE_TYPE_QUESTION_ID)

@@ -8,6 +8,7 @@ import httpx
 from app.constants.decision.decision_model_config import (
     DECISION_ENDPOINT_DEFAULT,
     DECISION_MODEL_DEFAULT,
+    DECISION_PROBABILITY_THRESHOLD,
     DECISION_REQUEST_TIMEOUT_SECONDS,
 )
 
@@ -64,11 +65,63 @@ class DecisionModelClient:
             return response.json().get(_ANSWERS_FIELD, {})
 
 
-def noul_probability(answer: dict) -> float:
-    """Probability that the Noul question's answer is "yes"."""
-    return float(answer[_NOUL_FIELD])
+def noul_answer_is_yes(answers: dict, question_id: str) -> bool:
+    """Whether the Noul question's answer reads as "yes" at the configured threshold.
+
+    Raises a descriptive :class:`ValueError` naming the question id when the
+    provider returned no answer for it, instead of a bare ``KeyError``; a present
+    but malformed answer (a ``null`` or non-numeric probability) raises the same
+    from :func:`noul_probability`.
+    """
+    if question_id not in answers:
+        raise ValueError(f"Decision model returned no answer for question '{question_id}'.")
+    return noul_probability(answers[question_id], question_id) >= DECISION_PROBABILITY_THRESHOLD
 
 
-def choice_label(answer: dict) -> str:
-    """The single label a Choice question selected."""
-    return str(answer[_CHOICE_FIELD])
+def noul_probability(answer: dict, question_id: str | None = None) -> float:
+    """Probability that the Noul question's answer is "yes".
+
+    ``question_id`` is optional context that names the question in error
+    messages. A malformed answer payload — no ``noul`` field, a ``null``
+    probability, or a non-numeric value — raises a descriptive
+    :class:`ValueError` rather than failing obscurely downstream.
+    """
+    if _NOUL_FIELD not in answer:
+        raise ValueError(
+            f"{_answer_description(question_id)} is missing the '{_NOUL_FIELD}' probability field."
+        )
+    probability = answer[_NOUL_FIELD]
+    if probability is None:
+        raise ValueError(
+            f"{_answer_description(question_id)} has a null '{_NOUL_FIELD}' probability."
+        )
+    try:
+        return float(probability)
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            f"{_answer_description(question_id)} has a non-numeric '{_NOUL_FIELD}' "
+            f"probability {probability!r}."
+        ) from error
+
+
+def choice_label(answer: dict, question_id: str | None = None) -> str:
+    """The single label a Choice question selected.
+
+    ``question_id`` is optional context that names the question in error
+    messages. A malformed answer payload — no ``choice`` field or a ``null``
+    label — raises a descriptive :class:`ValueError`.
+    """
+    if _CHOICE_FIELD not in answer:
+        raise ValueError(
+            f"{_answer_description(question_id)} is missing the '{_CHOICE_FIELD}' label field."
+        )
+    label = answer[_CHOICE_FIELD]
+    if label is None:
+        raise ValueError(f"{_answer_description(question_id)} has a null '{_CHOICE_FIELD}' label.")
+    return str(label)
+
+
+def _answer_description(question_id: str | None) -> str:
+    if question_id is None:
+        return "Decision answer"
+    return f"Decision answer for question '{question_id}'"
