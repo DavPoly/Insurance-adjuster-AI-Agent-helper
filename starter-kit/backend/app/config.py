@@ -1,5 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.constants.decision.decision_model_config import (
+    DECISION_ENDPOINT_DEFAULT,
+    DECISION_MODEL_DEFAULT,
+)
 from app.constants.llm.openrouter_gateway_config import OPENROUTER_BASE_URL_DEFAULT
 
 
@@ -14,6 +18,10 @@ class Settings(BaseSettings):
     openrouter_base_url: str = OPENROUTER_BASE_URL_DEFAULT
     llm_model: str = ""
     qdrant_url: str = ""
+    # Jev decision model served through OpenRouter's Decisions API; reuses
+    # openrouter_api_key, so no separate credential is introduced.
+    decision_model: str = DECISION_MODEL_DEFAULT
+    decision_endpoint: str = DECISION_ENDPOINT_DEFAULT
 
 
 def get_settings() -> Settings:

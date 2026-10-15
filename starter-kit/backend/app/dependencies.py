@@ -5,6 +5,7 @@ from qdrant_client import QdrantClient
 
 from app.config import get_settings
 from app.constants.tools.tool_lookup_table_paths import cost_table_path, coverage_table_path
+from app.llm.decision_model_client import DecisionModelClient
 from app.llm.triage_chat_model import build_triage_chat_model
 from app.rag.embedder import ClaimEmbedder
 from app.tools.loader import load_json_table
@@ -36,3 +37,14 @@ def get_coverage_table() -> dict:
 def get_triage_chat_model() -> BaseChatModel:
     """Process-wide singleton: avoids rebuilding the chat client per request."""
     return build_triage_chat_model(get_settings())
+
+
+@lru_cache
+def get_decision_model_client() -> DecisionModelClient:
+    """Process-wide singleton: the Jev client holds no per-request state."""
+    settings = get_settings()
+    return DecisionModelClient(
+        api_key=settings.openrouter_api_key,
+        model=settings.decision_model,
+        endpoint=settings.decision_endpoint,
+    )
