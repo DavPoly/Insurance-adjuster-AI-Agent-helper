@@ -190,6 +190,9 @@ def _trace_steps_reflecting_final_outcome(
 
 
 def _set_traced_observation(steps: list[dict], tool_name: str, tool_output: object) -> None:
+    # Invariant: the orchestrator deterministically emits an act step (and its
+    # following observe step) for every operation, so the lookup below never
+    # raises StopIteration for a step name the pipeline built.
     act_index = next(
         index for index, step in enumerate(steps) if step.get("tool_name") == tool_name
     )
