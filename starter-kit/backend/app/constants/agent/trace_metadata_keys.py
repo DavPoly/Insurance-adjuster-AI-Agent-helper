@@ -1,1 +1,0 @@
-TRACED_AT_METADATA_KEY = "traced_at"
