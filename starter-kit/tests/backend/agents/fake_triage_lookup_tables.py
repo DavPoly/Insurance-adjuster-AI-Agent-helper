@@ -1,5 +1,5 @@
-"""Minimal fake cost/coverage lookup tables for exercising the triage agent's
-tool wiring. The pure lookup logic itself is covered by
+"""Minimal fake cost/coverage lookup tables for exercising the deterministic
+triage pipeline's tool wiring. The pure lookup logic itself is covered by
 tests/backend/tools/test_cost_estimator.py and test_coverage_checker.py.
 """
 

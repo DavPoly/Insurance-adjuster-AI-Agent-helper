@@ -1,18 +1,13 @@
 """Fixture values for the node-1 (claim decision) tests.
 
-``NOUL_ANSWER_FIELD`` / ``CHOICE_ANSWER_FIELD`` mirror the keys the real
-Decisions API nests an answer under, and the ``*_PART_*`` keys mirror the
-OpenAI-style state parts the API accepts. These are the wire format on purpose:
-the tests assert the literal request shape, so reusing the node's private
-field-name constants would make those assertions tautological.
+The answer wire constants live in ``fake_decision_model_client``; this module
+holds the canned submission/decision values and the OpenAI-style state-part
+keys. The ``*_PART_*`` keys mirror the state parts the Decisions API accepts and
+are wire format on purpose, so the tests assert the literal request shape rather
+than reusing the node's private field-name constants.
 """
 
 from app.constants.claims.claim_taxonomy import DamageType, PolicyType, SeverityLevel
-from app.constants.decision.decision_model_config import DECISION_PROBABILITY_THRESHOLD
-
-NOUL_ANSWER_FIELD = "noul"
-CHOICE_ANSWER_FIELD = "choice"
-QUESTION_TYPE_FIELD = "type"
 
 TEXT_PART_TYPE = "text"
 IMAGE_URL_PART_TYPE = "image_url"
@@ -29,9 +24,3 @@ FAKE_SECOND_IMAGE_DATA_URL = "data:image/png;base64,ZmFrZS1zZWNvbmQtcGhvdG8="
 FAKE_DAMAGE_TYPE = DamageType.WATER_DAMAGE
 FAKE_SEVERITY = SeverityLevel.MODERATE
 FAKE_AFFECTED_AREAS = ("kitchen", "dining_room")
-
-PASSING_NOUL_PROBABILITY = 1.0
-FAILING_NOUL_PROBABILITY = 0.0
-# Keeps the "just below the threshold" case within float precision of the bound.
-NEAR_THRESHOLD_STEP = 0.01
-JUST_BELOW_THRESHOLD_PROBABILITY = DECISION_PROBABILITY_THRESHOLD - NEAR_THRESHOLD_STEP

@@ -17,7 +17,6 @@ from deterministic_triage_test_fixtures import (
     EXPECTED_PAST_CLAIMS_RESULT,
     EXPECTED_REPAIR_COST_MAX,
     EXPECTED_REPAIR_COST_MIN,
-    FAILING_NOUL_PROBABILITY,
     FAKE_DRAFTED_RESOLUTION_SUMMARY,
     FAKE_SYNTHESIZED_DAMAGE_DESCRIPTION,
     FAKE_SYNTHESIZED_RECOMMENDATION,
@@ -29,7 +28,6 @@ from deterministic_triage_test_fixtures import (
     SEARCH_QUERY_ARGUMENT,
     SEVERITY_ARGUMENT,
     CountingSynthesisChatModel,
-    RecordingSafetyDecisionClient,
     RecordingTriageEmbedder,
     RecordingTriageQdrantClient,
     all_passing_safety_checks,
@@ -37,6 +35,7 @@ from deterministic_triage_test_fixtures import (
     build_submission,
     build_synthesis_draft,
 )
+from fake_decision_model_client import FAILING_NOUL_PROBABILITY, FakeDecisionModelClient
 from fake_triage_lookup_tables import FAKE_COST_TABLE, FAKE_COVERAGE_TABLE
 from fake_triage_qdrant_client import (
     FAKE_SEARCH_CLAIM_ID,
@@ -97,7 +96,7 @@ def _run_pipeline(
 def _build_dependencies() -> tuple:
     return (
         CountingSynthesisChatModel(build_synthesis_draft()),
-        RecordingSafetyDecisionClient(),
+        FakeDecisionModelClient(),
         RecordingTriageQdrantClient([FAKE_SEARCH_POINT]),
         RecordingTriageEmbedder(),
     )
@@ -250,7 +249,7 @@ def test_run_deterministic_triage_keys_the_cost_tool_on_the_threaded_decision():
 
 
 def test_run_deterministic_triage_returns_a_failing_safety_result_for_the_router_retry():
-    decision_client = RecordingSafetyDecisionClient(
+    decision_client = FakeDecisionModelClient(
         {NO_COVERAGE_PROMISES_QUESTION_ID: FAILING_NOUL_PROBABILITY}
     )
     llm = CountingSynthesisChatModel(build_synthesis_draft())

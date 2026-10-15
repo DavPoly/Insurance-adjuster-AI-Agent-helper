@@ -11,14 +11,9 @@ GETs — plus that the optional PDF's text reaches node 1.
 
 from pathlib import Path
 
-from fake_triage_route_dependencies import (
-    FAKE_COST_TABLE,
-    FAKE_COVERAGE_TABLE,
-    FakeDecisionModelClient,
-    FakeTriageChatModel,
-    FakeTriageEmbedder,
-    FakeTriageQdrantClient,
-)
+from agents.fake_triage_lookup_tables import FAKE_COST_TABLE, FAKE_COVERAGE_TABLE
+from agents.fake_triage_qdrant_client import FakeTriageEmbedder, FakeTriageQdrantClient
+from fake_triage_route_dependencies import CountingTriageChatModel, FakeDecisionModelClient
 from triage_route_test_values import (
     FAKE_CLAIM_DESCRIPTION,
     FAKE_SYNTHESIZED_DAMAGE_DESCRIPTION,
@@ -111,19 +106,19 @@ def _failing_safety_checks() -> SafetyChecksOut:
     )
 
 
-def _build_synthesis_chat_model() -> FakeTriageChatModel:
-    return FakeTriageChatModel(
+def _build_synthesis_chat_model() -> CountingTriageChatModel:
+    return CountingTriageChatModel(
         structured_output_values_by_schema={TriageAssessmentOut: _synthesized_assessment()}
     )
 
 
 def _override_dependencies(
-    llm: FakeTriageChatModel,
+    llm: CountingTriageChatModel,
     store: TriageReportStore,
     decision_client: FakeDecisionModelClient | None = None,
 ) -> None:
     app.dependency_overrides[get_triage_chat_model] = lambda: llm
-    app.dependency_overrides[get_qdrant_client] = lambda: FakeTriageQdrantClient()
+    app.dependency_overrides[get_qdrant_client] = lambda: FakeTriageQdrantClient([])
     app.dependency_overrides[get_claim_embedder] = lambda: FakeTriageEmbedder()
     app.dependency_overrides[get_cost_table] = lambda: FAKE_COST_TABLE
     app.dependency_overrides[get_coverage_table] = lambda: FAKE_COVERAGE_TABLE

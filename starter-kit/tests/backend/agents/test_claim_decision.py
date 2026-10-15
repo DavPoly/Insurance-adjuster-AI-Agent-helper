@@ -9,8 +9,6 @@ import asyncio
 
 import pytest
 from claim_decision_test_fixtures import (
-    CHOICE_ANSWER_FIELD,
-    FAILING_NOUL_PROBABILITY,
     FAKE_AFFECTED_AREAS,
     FAKE_DAMAGE_TYPE,
     FAKE_DESCRIPTION,
@@ -22,12 +20,15 @@ from claim_decision_test_fixtures import (
     IMAGE_URL_PART_KEY,
     IMAGE_URL_PART_TYPE,
     IMAGE_URL_PART_URL_KEY,
-    JUST_BELOW_THRESHOLD_PROBABILITY,
-    NOUL_ANSWER_FIELD,
-    PASSING_NOUL_PROBABILITY,
-    QUESTION_TYPE_FIELD,
     TEXT_PART_TEXT_KEY,
     TEXT_PART_TYPE,
+)
+from fake_decision_model_client import (
+    FAILING_NOUL_PROBABILITY,
+    JUST_BELOW_THRESHOLD_PROBABILITY,
+    PASSING_NOUL_PROBABILITY,
+    QUESTION_TYPE_FIELD,
+    FakeDecisionModelClient,
 )
 
 from app.agents.claim_decision import (
@@ -37,7 +38,6 @@ from app.agents.claim_decision import (
 )
 from app.agents.prompts.claim_decision_questions import (
     AFFECTED_AREA_QUESTION_ID_PREFIX,
-    CHOICE_QUESTION_TYPE,
     CLAIM_DECISION_QUESTIONS,
     DAMAGE_TYPE_QUESTION_ID,
     IS_PROPERTY_DAMAGE_QUESTION_ID,
@@ -63,41 +63,6 @@ from app.constants.intake.intake_validation_messages import (
 )
 
 
-class _FakeDecisionModelClient:
-    """Stands in for DecisionModelClient with no HTTP; records the request."""
-
-    def __init__(
-        self,
-        noul_probability_by_question_id: dict[str, float] | None = None,
-        choice_label_by_question_id: dict[str, str] | None = None,
-        default_noul_probability: float = FAILING_NOUL_PROBABILITY,
-    ) -> None:
-        self._noul_probability_by_question_id = dict(noul_probability_by_question_id or {})
-        self._choice_label_by_question_id = dict(choice_label_by_question_id or {})
-        self._default_noul_probability = default_noul_probability
-        self.observed_state: object | None = None
-        self.observed_questions: dict[str, dict] | None = None
-        self.call_count = 0
-
-    async def decide(self, state: object, questions: dict[str, dict]) -> dict[str, dict]:
-        self.call_count += 1
-        self.observed_state = state
-        self.observed_questions = questions
-        return {
-            question_id: self._answer(question_id, question_spec)
-            for question_id, question_spec in questions.items()
-        }
-
-    def _answer(self, question_id: str, question_spec: dict) -> dict:
-        if question_spec[QUESTION_TYPE_FIELD] == CHOICE_QUESTION_TYPE:
-            return {CHOICE_ANSWER_FIELD: self._choice_label_by_question_id[question_id]}
-        return {
-            NOUL_ANSWER_FIELD: self._noul_probability_by_question_id.get(
-                question_id, self._default_noul_probability
-            )
-        }
-
-
 def _passing_intake_noul_answers() -> dict[str, float]:
     return {
         IS_PROPERTY_DAMAGE_QUESTION_ID: PASSING_NOUL_PROBABILITY,
@@ -118,8 +83,8 @@ def _build_client(
     noul_answers: dict[str, float] | None = None,
     choice_answers: dict[str, str] | None = None,
     default_noul_probability: float = FAILING_NOUL_PROBABILITY,
-) -> _FakeDecisionModelClient:
-    return _FakeDecisionModelClient(
+) -> FakeDecisionModelClient:
+    return FakeDecisionModelClient(
         noul_probability_by_question_id=(
             noul_answers if noul_answers is not None else _passing_intake_noul_answers()
         ),
@@ -155,7 +120,7 @@ def _decision(**overrides) -> ClaimDecisionOut:
 
 
 def _run_decide_claim(
-    client: _FakeDecisionModelClient, submission: ClaimSubmission
+    client: FakeDecisionModelClient, submission: ClaimSubmission
 ) -> ClaimDecisionOut:
     return asyncio.run(decide_claim(client, submission))
 

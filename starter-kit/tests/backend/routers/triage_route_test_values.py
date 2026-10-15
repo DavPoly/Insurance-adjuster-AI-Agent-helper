@@ -1,7 +1,7 @@
 """Fixture values for the triage router tests.
 
 The fake decision client classifies every claim as the same water-damage claim,
-so the echoing description, the synthesized free text, and the sample inspection
+so the claim description, the synthesized free text, and the sample inspection
 document used to exercise PDF threading all live here rather than inline in the
 test bodies.
 """

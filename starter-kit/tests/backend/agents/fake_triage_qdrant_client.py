@@ -2,7 +2,6 @@
 Ranking/recall behavior itself is covered by tests/backend/tools/test_claim_search.py.
 """
 
-FAKE_SEARCH_QUERY = "pipe burst under the sink"
 FAKE_SEARCH_CLAIM_ID = "CLM-9999-001"
 FAKE_SEARCH_SIMILARITY_SCORE = 0.87
 

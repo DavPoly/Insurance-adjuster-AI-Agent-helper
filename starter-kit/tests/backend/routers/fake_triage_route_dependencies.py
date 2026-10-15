@@ -1,3 +1,21 @@
+"""Router-specific triage fakes built on the shared agents-suite fakes.
+
+Only the pieces the router tests genuinely need live here: a Jev decision client
+that scripts both nodes (node 1's classification and node 4's safety retries) and
+a synthesis chat model that counts its structured-output calls so the tests can
+pin the bounded safety retry. The chat-model, Qdrant, embedder, lookup-table, and
+Jev-answer fakes themselves are imported from the agents suite.
+"""
+
+from agents.fake_decision_model_client import (
+    CHOICE_ANSWER_FIELD,
+    FAILING_NOUL_PROBABILITY,
+    NOUL_ANSWER_FIELD,
+    PASSING_NOUL_PROBABILITY,
+    QUESTION_TYPE_FIELD,
+)
+from agents.fake_triage_chat_model import FakeTriageChatModel
+
 from app.agents.prompts.claim_decision_questions import (
     AFFECTED_AREA_QUESTION_ID_PREFIX,
     CHOICE_QUESTION_TYPE,
@@ -7,14 +25,6 @@ from app.agents.prompts.claim_decision_questions import (
 from app.agents.prompts.safety_decision_questions import SAFETY_DECISION_QUESTIONS
 from app.agents.schemas.safety_checks_schema import SafetyChecksOut
 from app.constants.claims.claim_taxonomy import DamageType, SeverityLevel
-
-# Wire-format keys mirroring the Decisions API request/answer shape. Re-typed on
-# purpose so the fake stays independent of the client's private field names.
-_QUESTION_TYPE_FIELD = "type"
-_NOUL_ANSWER_FIELD = "noul"
-_CHOICE_ANSWER_FIELD = "choice"
-_PASSING_NOUL_PROBABILITY = 1.0
-_FAILING_NOUL_PROBABILITY = 0.0
 
 _SAFETY_QUESTION_IDS = frozenset(SAFETY_DECISION_QUESTIONS)
 
@@ -64,17 +74,17 @@ class FakeDecisionModelClient:
             outcomes = self._safety_check_attempts[attempt_index].model_dump()
         return {
             question_id: {
-                _NOUL_ANSWER_FIELD: (
-                    _PASSING_NOUL_PROBABILITY if passed else _FAILING_NOUL_PROBABILITY
+                NOUL_ANSWER_FIELD: (
+                    PASSING_NOUL_PROBABILITY if passed else FAILING_NOUL_PROBABILITY
                 )
             }
             for question_id, passed in outcomes.items()
         }
 
     def _answer(self, question_id: str, question_spec: dict) -> dict:
-        if question_spec[_QUESTION_TYPE_FIELD] == CHOICE_QUESTION_TYPE:
-            return {_CHOICE_ANSWER_FIELD: self._choice_label(question_id)}
-        return {_NOUL_ANSWER_FIELD: self._noul_probability(question_id)}
+        if question_spec[QUESTION_TYPE_FIELD] == CHOICE_QUESTION_TYPE:
+            return {CHOICE_ANSWER_FIELD: self._choice_label(question_id)}
+        return {NOUL_ANSWER_FIELD: self._noul_probability(question_id)}
 
     def _choice_label(self, question_id: str) -> str:
         return {
@@ -88,77 +98,40 @@ class FakeDecisionModelClient:
         if question_id.startswith(AFFECTED_AREA_QUESTION_ID_PREFIX):
             area = question_id.removeprefix(AFFECTED_AREA_QUESTION_ID_PREFIX)
             return (
-                _PASSING_NOUL_PROBABILITY
+                PASSING_NOUL_PROBABILITY
                 if area in self._affected_areas
-                else _FAILING_NOUL_PROBABILITY
+                else FAILING_NOUL_PROBABILITY
             )
-        return _PASSING_NOUL_PROBABILITY
+        return PASSING_NOUL_PROBABILITY
 
 
-class FakeTriageChatModel:
+class CountingTriageChatModel(FakeTriageChatModel):
+    """A shared fake synthesis model that also counts its structured-output calls.
+
+    The router's bounded safety retry re-runs synthesis between attempts, so the
+    tests assert how many times the LLM was invoked.
+    """
+
     def __init__(
         self,
-        tool_loop_responses=None,
         structured_output_value=None,
         structured_output_values_by_schema=None,
-    ):
-        self._tool_loop_responses = list(tool_loop_responses or [])
-        self._call_index = 0
-        self._structured_output_value = structured_output_value
-        self._structured_output_values_by_schema = structured_output_values_by_schema or {}
+    ) -> None:
+        super().__init__(
+            structured_output_value=structured_output_value,
+            structured_output_values_by_schema=structured_output_values_by_schema,
+        )
         self.structured_output_invoke_count = 0
 
-    def bind_tools(self, tools):
-        return self
-
-    def invoke(self, messages):
-        response = self._tool_loop_responses[self._call_index]
-        self._call_index += 1
-        return response
-
     def with_structured_output(self, schema):
-        value = self._structured_output_values_by_schema.get(schema, self._structured_output_value)
-        return _FakeStructuredOutputRunnable(value, self)
+        return _CountingStructuredOutputRunnable(super().with_structured_output(schema), self)
 
 
-class _FakeStructuredOutputRunnable:
-    def __init__(self, value, owner: FakeTriageChatModel):
-        self._value = value
+class _CountingStructuredOutputRunnable:
+    def __init__(self, runnable, owner: CountingTriageChatModel) -> None:
+        self._runnable = runnable
         self._owner = owner
 
     def invoke(self, messages):
         self._owner.structured_output_invoke_count += 1
-        return self._value
-
-
-class _FakeQueryResponse:
-    def __init__(self, points: list):
-        self.points = points
-
-
-class FakeTriageQdrantClient:
-    def query_points(self, collection_name: str, query, limit: int):
-        return _FakeQueryResponse([])
-
-
-class FakeTriageEmbedder:
-    def embed_query(self, text: str) -> list[float]:
-        return [0.0]
-
-
-FAKE_COST_TABLE = {
-    "cost_matrix": {
-        "water_damage": {"minor": {"min_per_area": 500, "max_per_area": 2000}},
-    }
-}
-
-FAKE_COVERAGE_TABLE = {
-    "policies": {
-        "standard_homeowner": {
-            "covered_categories": ["water_damage"],
-            "deductible": 1500,
-            "max_payout": 250000,
-            "notes": "Fake standard coverage notes.",
-        }
-    }
-}
+        return self._runnable.invoke(messages)

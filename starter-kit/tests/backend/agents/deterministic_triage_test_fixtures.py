@@ -38,20 +38,15 @@ from app.constants.claims.claim_taxonomy import (
 )
 from app.constants.tools.cost_estimate_currency import DEFAULT_CURRENCY
 
-# Wire-format keys and tool argument names are re-typed on purpose: the tests
-# assert the literal call shape the deterministic tools and the Decisions API
-# receive, so reusing the orchestrator's private key constants would make those
-# assertions tautological.
-NOUL_ANSWER_FIELD = "noul"
+# Tool argument names are re-typed on purpose: the tests assert the literal call
+# shape the deterministic tools receive, so reusing the orchestrator's private
+# key constants would make those assertions tautological.
 DAMAGE_TYPE_ARGUMENT = "damage_type"
 SEVERITY_ARGUMENT = "severity"
 AFFECTED_AREAS_ARGUMENT = "affected_areas"
 SEARCH_QUERY_ARGUMENT = "query"
 POLICY_TYPE_ARGUMENT = "policy_type"
 INCIDENT_CATEGORY_ARGUMENT = "incident_category"
-
-PASSING_NOUL_PROBABILITY = 1.0
-FAILING_NOUL_PROBABILITY = 0.0
 
 FAKE_TRIAGE_DESCRIPTION = "A burst pipe soaked the kitchen floor and the dining room carpet."
 FAKE_TRIAGE_DOCUMENT_TEXT = "Inspection report: water also reached the dining room ceiling."
@@ -135,34 +130,6 @@ def all_passing_safety_checks() -> SafetyChecksOut:
         no_liability_determination=True,
         no_emotional_language=True,
     )
-
-
-class RecordingSafetyDecisionClient:
-    """Stands in for DecisionModelClient at node 4 with no HTTP; records the request."""
-
-    def __init__(
-        self,
-        noul_probability_by_question_id: dict[str, float] | None = None,
-        default_noul_probability: float = PASSING_NOUL_PROBABILITY,
-    ) -> None:
-        self._noul_probability_by_question_id = dict(noul_probability_by_question_id or {})
-        self._default_noul_probability = default_noul_probability
-        self.observed_state: object | None = None
-        self.observed_questions: dict[str, dict] | None = None
-        self.call_count = 0
-
-    async def decide(self, state: object, questions: dict[str, dict]) -> dict[str, dict]:
-        self.call_count += 1
-        self.observed_state = state
-        self.observed_questions = questions
-        return {
-            question_id: {
-                NOUL_ANSWER_FIELD: self._noul_probability_by_question_id.get(
-                    question_id, self._default_noul_probability
-                )
-            }
-            for question_id in questions
-        }
 
 
 class CountingSynthesisChatModel(FakeTriageChatModel):
