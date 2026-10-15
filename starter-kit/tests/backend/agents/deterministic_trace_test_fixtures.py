@@ -1,8 +1,4 @@
-"""Fixture values for the deterministic trace-builder tests.
-
-Kept separate from the message-based cases in test_triage_agent_trace.py so the
-two builders' fixtures do not collide while both live in the trace module.
-"""
+"""Fixture values for the deterministic trace-builder tests."""
 
 FAKE_DETERMINISTIC_TRACED_AT = "2026-02-02T00:00:00+00:00"
 FAKE_DETERMINISTIC_REASON_CONTENT = "Deciding which deterministic step to run next."
