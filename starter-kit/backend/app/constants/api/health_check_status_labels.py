@@ -1,0 +1,5 @@
+HEALTHY_STATUS = "healthy"
+VECTOR_DB_CONNECTED = "connected"
+VECTOR_DB_DISCONNECTED = "disconnected"
+LLM_CONFIGURED = "configured"
+LLM_NOT_CONFIGURED = "not_configured"

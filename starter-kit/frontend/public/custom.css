@@ -1,0 +1,26 @@
+/* Hides Chainlit's blinking streaming-cursor indicator, which otherwise
+   renders as a bare dot under a running Step with no text content yet. */
+.loading-cursor {
+  display: none !important;
+}
+
+[role="dialog"] div[class*="mx-auto flex flex-col flex-grow gap-6"],
+[role="dialog"] [style*="max-width"] {
+  max-width: min(1200px, 92vw) !important;
+  width: min(1200px, 92vw) !important;
+}
+
+.prose.overflow-y-auto [class*="max-w-"] {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+.prose.overflow-y-auto > * {
+  width: min(1200px, 92vw) !important;
+  max-width: min(1200px, 92vw) !important;
+}
+
+.prose.overflow-y-auto div:has(> div > img[src*="Diagram"]) {
+  padding-bottom: 55.8140% !important; /* 2752x1536 source */
+}
+

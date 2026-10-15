@@ -1,0 +1,1 @@
+DEFAULT_IMAGE_CONTENT_TYPE = "image/jpeg"

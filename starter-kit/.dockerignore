@@ -1,0 +1,13 @@
+data/
+tests/
+api-contract/
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.env
