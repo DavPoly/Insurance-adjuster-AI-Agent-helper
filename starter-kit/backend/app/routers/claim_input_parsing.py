@@ -3,17 +3,20 @@ import io
 from dataclasses import dataclass
 
 from fastapi import Depends, File, Form, UploadFile
-from langchain_core.language_models.chat_models import BaseChatModel
 from pypdf import PdfReader
 
-from app.agents.intake_validator import (
-    describe_intake_validation_failure,
-    intake_validation_passed,
-    validate_claim_intake,
+from app.agents.claim_decision import (
+    claim_decision_passed,
+    decide_claim,
+    describe_claim_decision_failure,
 )
+from app.agents.schemas.claim_decision_schema import ClaimDecisionOut
+from app.agents.schemas.claim_submission import ClaimSubmission
 from app.agents.schemas.intake_validation_schema import IntakeValidationOut
+from app.constants.claims.claim_taxonomy import PolicyType
 from app.constants.intake.image_upload_config import DEFAULT_IMAGE_CONTENT_TYPE
-from app.dependencies import get_triage_chat_model
+from app.dependencies import get_decision_model_client
+from app.llm.decision_model_client import DecisionModelClient
 from app.routers.triage_exceptions import IntakeValidationFailed
 
 
@@ -30,7 +33,8 @@ async def parse_and_validate_claim_input(
     images: list[UploadFile] | None = File(default=None),
     description: str | None = Form(default=None),
     document: UploadFile | None = File(default=None),
-    llm: BaseChatModel = Depends(get_triage_chat_model),
+    policy_type: PolicyType = Form(default=PolicyType.STANDARD_HOMEOWNER),
+    decision_client: DecisionModelClient = Depends(get_decision_model_client),
 ) -> ParsedClaimInput:
     uploaded_images = collect_uploaded_images(image, images)
     stripped_description = (description or "").strip()
@@ -38,11 +42,17 @@ async def parse_and_validate_claim_input(
 
     image_data_urls = [await encode_image_as_data_url(upload) for upload in uploaded_images]
 
-    intake_validation = validate_claim_intake(llm, image_data_urls, stripped_description)
-    if not intake_validation_passed(intake_validation):
+    submission = ClaimSubmission(
+        description=stripped_description,
+        policy_type=policy_type,
+        image_data_urls=image_data_urls,
+    )
+    claim_decision = await decide_claim(decision_client, submission)
+    intake_validation = to_intake_validation(claim_decision)
+    if not claim_decision_passed(claim_decision):
         raise IntakeValidationFailed(
             intake_validation=intake_validation,
-            message=describe_intake_validation_failure(intake_validation, has_required_input),
+            message=describe_claim_decision_failure(claim_decision, has_required_input),
         )
 
     return ParsedClaimInput(
@@ -50,6 +60,16 @@ async def parse_and_validate_claim_input(
         description=stripped_description,
         document=document,
         intake_validation=intake_validation,
+    )
+
+
+def to_intake_validation(claim_decision: ClaimDecisionOut) -> IntakeValidationOut:
+    """Project the node-1 decision onto the response contract's intake booleans."""
+    return IntakeValidationOut(
+        is_property_damage=claim_decision.is_property_damage,
+        is_valid_image=claim_decision.is_valid_image,
+        no_pii_detected=claim_decision.no_pii_detected,
+        no_offensive_content=claim_decision.no_offensive_content,
     )
 
 

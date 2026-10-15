@@ -1,13 +1,14 @@
 from fake_triage_route_dependencies import (
     FAKE_COST_TABLE,
     FAKE_COVERAGE_TABLE,
+    FakeDecisionModelClient,
     FakeTriageChatModel,
     FakeTriageEmbedder,
     FakeTriageQdrantClient,
 )
 from langchain_core.messages import AIMessage
 
-from app.agents.schemas.intake_validation_schema import IntakeValidationOut
+from app.agents.prompts.claim_decision_questions import IS_PROPERTY_DAMAGE_QUESTION_ID
 from app.agents.schemas.safety_checks_schema import SafetyChecksOut
 from app.agents.schemas.triage_assessment_schema import (
     EstimatedRepairCostOut,
@@ -17,6 +18,7 @@ from app.dependencies import (
     get_claim_embedder,
     get_cost_table,
     get_coverage_table,
+    get_decision_model_client,
     get_qdrant_client,
     get_triage_chat_model,
 )
@@ -40,15 +42,6 @@ def _fake_triage_assessment() -> TriageAssessmentOut:
     )
 
 
-def _passing_intake_validation() -> IntakeValidationOut:
-    return IntakeValidationOut(
-        is_property_damage=True,
-        is_valid_image=None,
-        no_pii_detected=True,
-        no_offensive_content=True,
-    )
-
-
 def _passing_safety_checks() -> SafetyChecksOut:
     return SafetyChecksOut(
         no_coverage_promises=True,
@@ -65,20 +58,26 @@ def _build_fake_llm(
     return FakeTriageChatModel(
         tool_loop_responses=tool_loop_responses,
         structured_output_values_by_schema={
-            IntakeValidationOut: _passing_intake_validation(),
             TriageAssessmentOut: _fake_triage_assessment(),
             SafetyChecksOut: safety_checks or _passing_safety_checks(),
         },
     )
 
 
-def _override_dependencies(llm: FakeTriageChatModel, store: TriageReportStore) -> None:
+def _override_dependencies(
+    llm: FakeTriageChatModel,
+    store: TriageReportStore,
+    decision_client: FakeDecisionModelClient | None = None,
+) -> None:
     app.dependency_overrides[get_triage_chat_model] = lambda: llm
     app.dependency_overrides[get_qdrant_client] = lambda: FakeTriageQdrantClient()
     app.dependency_overrides[get_claim_embedder] = lambda: FakeTriageEmbedder()
     app.dependency_overrides[get_cost_table] = lambda: FAKE_COST_TABLE
     app.dependency_overrides[get_coverage_table] = lambda: FAKE_COVERAGE_TABLE
     app.dependency_overrides[get_triage_report_store] = lambda: store
+    app.dependency_overrides[get_decision_model_client] = lambda: (
+        decision_client or FakeDecisionModelClient()
+    )
 
 
 def test_triage_claim_returns_400_when_no_image_or_description(client):
@@ -88,6 +87,24 @@ def test_triage_claim_returns_400_when_no_image_or_description(client):
     body = response.json()
     assert body["error"] == "intake_validation_failed"
     assert body["intake_validation"]["is_property_damage"] is False
+
+
+def test_triage_claim_returns_400_when_the_decision_client_rejects_the_intake(client):
+    llm = _build_fake_llm([AIMessage(content="Ready to finalize.")])
+    decision_client = FakeDecisionModelClient(intake_answers={IS_PROPERTY_DAMAGE_QUESTION_ID: 0.0})
+    _override_dependencies(llm, TriageReportStore(), decision_client)
+
+    response = client.post(
+        "/api/v1/claims/triage", data={"description": "A photo of my cat on the sofa."}
+    )
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "intake_validation_failed"
+    assert body["intake_validation"]["is_property_damage"] is False
+    assert isinstance(body["message"], str) and body["message"]
+    assert not body.get("triage_assessment")
 
 
 def test_triage_claim_returns_200_for_a_text_only_description(client):

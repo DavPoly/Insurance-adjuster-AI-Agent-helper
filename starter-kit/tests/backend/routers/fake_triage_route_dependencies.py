@@ -1,3 +1,65 @@
+from app.agents.prompts.claim_decision_questions import (
+    AFFECTED_AREA_QUESTION_ID_PREFIX,
+    CHOICE_QUESTION_TYPE,
+    DAMAGE_TYPE_QUESTION_ID,
+    SEVERITY_QUESTION_ID,
+)
+from app.constants.claims.claim_taxonomy import DamageType, SeverityLevel
+
+# Wire-format keys mirroring the Decisions API request/answer shape. Re-typed on
+# purpose so the fake stays independent of the client's private field names.
+_QUESTION_TYPE_FIELD = "type"
+_NOUL_ANSWER_FIELD = "noul"
+_CHOICE_ANSWER_FIELD = "choice"
+_PASSING_NOUL_PROBABILITY = 1.0
+_FAILING_NOUL_PROBABILITY = 0.0
+
+
+class FakeDecisionModelClient:
+    """Stands in for DecisionModelClient: canned node-1 answers, no HTTP."""
+
+    def __init__(
+        self,
+        intake_answers: dict[str, float] | None = None,
+        damage_type: DamageType = DamageType.WATER_DAMAGE,
+        severity: SeverityLevel = SeverityLevel.MINOR,
+        affected_areas: tuple[str, ...] = (),
+    ) -> None:
+        self._intake_answers = dict(intake_answers or {})
+        self._damage_type = damage_type
+        self._severity = severity
+        self._affected_areas = set(affected_areas)
+
+    async def decide(self, state: object, questions: dict[str, dict]) -> dict[str, dict]:
+        return {
+            question_id: self._answer(question_id, question_spec)
+            for question_id, question_spec in questions.items()
+        }
+
+    def _answer(self, question_id: str, question_spec: dict) -> dict:
+        if question_spec[_QUESTION_TYPE_FIELD] == CHOICE_QUESTION_TYPE:
+            return {_CHOICE_ANSWER_FIELD: self._choice_label(question_id)}
+        return {_NOUL_ANSWER_FIELD: self._noul_probability(question_id)}
+
+    def _choice_label(self, question_id: str) -> str:
+        return {
+            DAMAGE_TYPE_QUESTION_ID: self._damage_type.value,
+            SEVERITY_QUESTION_ID: self._severity.value,
+        }[question_id]
+
+    def _noul_probability(self, question_id: str) -> float:
+        if question_id in self._intake_answers:
+            return self._intake_answers[question_id]
+        if question_id.startswith(AFFECTED_AREA_QUESTION_ID_PREFIX):
+            area = question_id.removeprefix(AFFECTED_AREA_QUESTION_ID_PREFIX)
+            return (
+                _PASSING_NOUL_PROBABILITY
+                if area in self._affected_areas
+                else _FAILING_NOUL_PROBABILITY
+            )
+        return _PASSING_NOUL_PROBABILITY
+
+
 class FakeTriageChatModel:
     def __init__(
         self,
