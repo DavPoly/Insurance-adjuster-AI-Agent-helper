@@ -4,6 +4,8 @@ from app.agents.prompts.claim_decision_questions import (
     DAMAGE_TYPE_QUESTION_ID,
     SEVERITY_QUESTION_ID,
 )
+from app.agents.prompts.safety_decision_questions import SAFETY_DECISION_QUESTIONS
+from app.agents.schemas.safety_checks_schema import SafetyChecksOut
 from app.constants.claims.claim_taxonomy import DamageType, SeverityLevel
 
 # Wire-format keys mirroring the Decisions API request/answer shape. Re-typed on
@@ -14,9 +16,19 @@ _CHOICE_ANSWER_FIELD = "choice"
 _PASSING_NOUL_PROBABILITY = 1.0
 _FAILING_NOUL_PROBABILITY = 0.0
 
+_SAFETY_QUESTION_IDS = frozenset(SAFETY_DECISION_QUESTIONS)
+
 
 class FakeDecisionModelClient:
-    """Stands in for DecisionModelClient: canned node-1 answers, no HTTP."""
+    """Stands in for DecisionModelClient across both Jev nodes, with no HTTP.
+
+    Node-1 calls replay the canned classification. Node-4 calls replay
+    ``safety_check_attempts``, one entry per successive safety call (the last
+    entry repeats once the script is exhausted; an empty script passes every
+    check) — so a test drives the router's bounded safety retry by listing a
+    failing-then-passing sequence. ``observed_claim_states`` records the node-1
+    request state so tests can assert the document text reached node 1.
+    """
 
     def __init__(
         self,
@@ -24,16 +36,39 @@ class FakeDecisionModelClient:
         damage_type: DamageType = DamageType.WATER_DAMAGE,
         severity: SeverityLevel = SeverityLevel.MINOR,
         affected_areas: tuple[str, ...] = (),
+        safety_check_attempts: tuple[SafetyChecksOut, ...] = (),
     ) -> None:
         self._intake_answers = dict(intake_answers or {})
         self._damage_type = damage_type
         self._severity = severity
         self._affected_areas = set(affected_areas)
+        self._safety_check_attempts = tuple(safety_check_attempts)
+        self.observed_claim_states: list[object] = []
+        self.safety_call_count = 0
 
     async def decide(self, state: object, questions: dict[str, dict]) -> dict[str, dict]:
+        if frozenset(questions) == _SAFETY_QUESTION_IDS:
+            return self._safety_answers()
+        self.observed_claim_states.append(state)
         return {
             question_id: self._answer(question_id, question_spec)
             for question_id, question_spec in questions.items()
+        }
+
+    def _safety_answers(self) -> dict[str, dict]:
+        self.safety_call_count += 1
+        if not self._safety_check_attempts:
+            outcomes = {question_id: True for question_id in _SAFETY_QUESTION_IDS}
+        else:
+            attempt_index = min(self.safety_call_count - 1, len(self._safety_check_attempts) - 1)
+            outcomes = self._safety_check_attempts[attempt_index].model_dump()
+        return {
+            question_id: {
+                _NOUL_ANSWER_FIELD: (
+                    _PASSING_NOUL_PROBABILITY if passed else _FAILING_NOUL_PROBABILITY
+                )
+            }
+            for question_id, passed in outcomes.items()
         }
 
     def _answer(self, question_id: str, question_spec: dict) -> dict:

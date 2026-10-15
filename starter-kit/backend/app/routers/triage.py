@@ -6,10 +6,14 @@ from fastapi.responses import JSONResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from qdrant_client import QdrantClient
 
-from app.agents.safety_checker import check_output_safety, safety_checks_passed
+from app.agents.deterministic_triage import (
+    DeterministicTriageResult,
+    run_deterministic_triage,
+    safety_checks_passed,
+)
+from app.agents.safety_decision import check_output_safety
 from app.agents.schemas.claim_submission import ClaimSubmission
 from app.agents.schemas.safety_checks_schema import SafetyChecksOut
-from app.agents.triage_agent import TriageAgentResult, run_triage_agent
 from app.agents.triage_synthesis import synthesize_triage_assessment
 from app.constants.agent.safety_check_retry_limits import MAX_SAFETY_CHECK_ATTEMPTS
 from app.constants.api.triage_route_error_codes import (
@@ -22,13 +26,14 @@ from app.dependencies import (
     get_claim_embedder,
     get_cost_table,
     get_coverage_table,
+    get_decision_model_client,
     get_qdrant_client,
     get_triage_chat_model,
 )
+from app.llm.decision_model_client import DecisionModelClient
 from app.rag.embedder import ClaimEmbedder
 from app.routers.claim_input_parsing import (
     ParsedClaimInput,
-    extract_pdf_text,
     parse_and_validate_claim_input,
 )
 from app.routers.triage_exceptions import SafetyCheckFailed
@@ -43,14 +48,19 @@ from app.storage.triage_report_store import TriageReportStore, get_triage_report
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+_DAMAGE_DESCRIPTION_ASSESSMENT_KEY = "damage_description"
+_RECOMMENDATION_ASSESSMENT_KEY = "recommendation"
+
 
 @router.post(
     "/claims/triage",
     summary="Submit a claim for triage",
     description=(
-        "Runs the triageAgent ReAct loop over a damage photo and/or text "
-        "description (plus an optional supporting PDF) and returns a structured "
-        "triage report."
+        "Runs the deterministic triage pipeline over a damage photo and/or text "
+        "description (plus an optional supporting PDF): a Jev intake-and-parameter "
+        "decision, the deterministic cost/coverage/past-claim tools, a single "
+        "generative synthesis call, and a Jev output-safety decision. Returns a "
+        "structured triage report."
     ),
     response_model=TriageResponseOut,
     responses={
@@ -73,27 +83,34 @@ async def triage_claim(
     claim_input: ParsedClaimInput = Depends(parse_and_validate_claim_input),
     policy_type: PolicyType = Form(default=PolicyType.STANDARD_HOMEOWNER),
     llm: BaseChatModel = Depends(get_triage_chat_model),
+    decision_client: DecisionModelClient = Depends(get_decision_model_client),
     client: QdrantClient = Depends(get_qdrant_client),
     embedder: ClaimEmbedder = Depends(get_claim_embedder),
     cost_table: dict = Depends(get_cost_table),
     coverage_table: dict = Depends(get_coverage_table),
     store: TriageReportStore = Depends(get_triage_report_store),
 ) -> TriageResponseOut:
-    image_data_urls = claim_input.image_data_urls
-    document_text = (
-        await extract_pdf_text(claim_input.document) if claim_input.document is not None else None
-    )
-
     submission = ClaimSubmission(
         description=claim_input.description,
         policy_type=policy_type,
-        image_data_urls=image_data_urls,
-        document_text=document_text,
+        image_data_urls=claim_input.image_data_urls,
+        document_text=claim_input.document_text,
     )
 
     start_time = time.monotonic()
-    result = run_triage_agent(submission, llm, client, embedder, cost_table, coverage_table)
-    triage_assessment, safety_checks = _resolve_safe_triage_assessment(llm, result)
+    result = await run_deterministic_triage(
+        submission=submission,
+        claim_decision=claim_input.claim_decision,
+        llm=llm,
+        decision_client=decision_client,
+        client=client,
+        embedder=embedder,
+        cost_table=cost_table,
+        coverage_table=coverage_table,
+    )
+    triage_assessment, safety_checks = await _resolve_safe_triage_assessment(
+        llm, decision_client, result
+    )
     total_duration_ms = int((time.monotonic() - start_time) * 1000)
 
     if not safety_checks_passed(safety_checks):
@@ -119,11 +136,19 @@ async def triage_claim(
     return response
 
 
-def _resolve_safe_triage_assessment(
-    llm: BaseChatModel, result: TriageAgentResult
+async def _resolve_safe_triage_assessment(
+    llm: BaseChatModel,
+    decision_client: DecisionModelClient,
+    result: DeterministicTriageResult,
 ) -> tuple[dict, SafetyChecksOut]:
+    """Keep the first pass's assessment unless node 4 fails, then regenerate in place.
+
+    The pipeline has already run node 4 once, so its verdict seeds the loop; on
+    failure the router regenerates over the carried synthesis input and re-checks
+    with node 4, bounded by ``MAX_SAFETY_CHECK_ATTEMPTS``.
+    """
     triage_assessment = result.triage_assessment
-    safety_checks = check_output_safety(llm, triage_assessment)
+    safety_checks = result.safety_checks
 
     attempt = 1
     while not safety_checks_passed(safety_checks) and attempt < MAX_SAFETY_CHECK_ATTEMPTS:
@@ -132,8 +157,12 @@ def _resolve_safe_triage_assessment(
             attempt,
             MAX_SAFETY_CHECK_ATTEMPTS,
         )
-        triage_assessment = synthesize_triage_assessment(llm, result.messages)
-        safety_checks = check_output_safety(llm, triage_assessment)
+        triage_assessment = synthesize_triage_assessment(llm, result.synthesis_messages)
+        safety_checks = await check_output_safety(
+            decision_client,
+            triage_assessment[_DAMAGE_DESCRIPTION_ASSESSMENT_KEY],
+            triage_assessment[_RECOMMENDATION_ASSESSMENT_KEY],
+        )
         attempt += 1
 
     return triage_assessment, safety_checks
@@ -165,11 +194,11 @@ def get_triage_report(claim_id: str, store: TriageReportStore = Depends(get_tria
 
 @router.get(
     "/agent/trace/{claim_id}",
-    summary="Get the ReAct execution trace for a triage run",
+    summary="Get the triage execution trace for a triage run",
     description="Returns the recorded reason/act/observe trace for a completed triage run.",
     response_model=AgentTraceOut,
     responses={
-        status.HTTP_200_OK: {"model": AgentTraceOut, "description": "Agent execution trace."},
+        status.HTTP_200_OK: {"model": AgentTraceOut, "description": "Triage execution trace."},
         status.HTTP_404_NOT_FOUND: {"description": "Trace not found."},
         status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Unexpected server error."},
     },

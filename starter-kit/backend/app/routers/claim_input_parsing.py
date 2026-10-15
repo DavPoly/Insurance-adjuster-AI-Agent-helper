@@ -24,7 +24,7 @@ from app.routers.triage_exceptions import IntakeValidationFailed
 class ParsedClaimInput:
     image_data_urls: list[str]
     description: str
-    document: UploadFile | None
+    document_text: str | None
     intake_validation: IntakeValidationOut
     claim_decision: ClaimDecisionOut
 
@@ -42,11 +42,13 @@ async def parse_and_validate_claim_input(
     has_required_input = bool(uploaded_images) or bool(stripped_description)
 
     image_data_urls = [await encode_image_as_data_url(upload) for upload in uploaded_images]
+    document_text = await extract_pdf_text(document) if document is not None else None
 
     submission = ClaimSubmission(
         description=stripped_description,
         policy_type=policy_type,
         image_data_urls=image_data_urls,
+        document_text=document_text,
     )
     claim_decision = await decide_claim(decision_client, submission)
     intake_validation = to_intake_validation(claim_decision)
@@ -59,7 +61,7 @@ async def parse_and_validate_claim_input(
     return ParsedClaimInput(
         image_data_urls=image_data_urls,
         description=stripped_description,
-        document=document,
+        document_text=document_text,
         intake_validation=intake_validation,
         claim_decision=claim_decision,
     )
