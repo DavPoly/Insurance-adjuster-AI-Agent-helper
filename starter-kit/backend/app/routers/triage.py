@@ -1,7 +1,7 @@
 import logging
 import time
 
-from fastapi import APIRouter, Depends, Form, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from qdrant_client import QdrantClient
@@ -12,16 +12,18 @@ from app.agents.deterministic_triage import (
     safety_checks_passed,
 )
 from app.agents.safety_decision import check_output_safety
-from app.agents.schemas.claim_submission import ClaimSubmission
 from app.agents.schemas.safety_checks_schema import SafetyChecksOut
 from app.agents.triage_synthesis import synthesize_triage_assessment
 from app.constants.agent.safety_check_retry_limits import MAX_SAFETY_CHECK_ATTEMPTS
+from app.constants.agent.triage_assessment_field_names import (
+    DAMAGE_DESCRIPTION_FIELD,
+    RECOMMENDATION_FIELD,
+)
 from app.constants.api.triage_route_error_codes import (
     CLAIM_NOT_FOUND_ERROR_CODE,
     TRACE_NOT_FOUND_ERROR_CODE,
 )
 from app.constants.claims.claim_id_config import generate_claim_id
-from app.constants.claims.claim_taxonomy import PolicyType
 from app.dependencies import (
     get_claim_embedder,
     get_cost_table,
@@ -47,9 +49,6 @@ from app.storage.triage_report_store import TriageReportStore, get_triage_report
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-_DAMAGE_DESCRIPTION_ASSESSMENT_KEY = "damage_description"
-_RECOMMENDATION_ASSESSMENT_KEY = "recommendation"
 
 
 @router.post(
@@ -81,29 +80,21 @@ _RECOMMENDATION_ASSESSMENT_KEY = "recommendation"
 )
 async def triage_claim(
     claim_input: ParsedClaimInput = Depends(parse_and_validate_claim_input),
-    policy_type: PolicyType = Form(default=PolicyType.STANDARD_HOMEOWNER),
     llm: BaseChatModel = Depends(get_triage_chat_model),
     decision_client: DecisionModelClient = Depends(get_decision_model_client),
-    client: QdrantClient = Depends(get_qdrant_client),
+    qdrant_client: QdrantClient = Depends(get_qdrant_client),
     embedder: ClaimEmbedder = Depends(get_claim_embedder),
     cost_table: dict = Depends(get_cost_table),
     coverage_table: dict = Depends(get_coverage_table),
     store: TriageReportStore = Depends(get_triage_report_store),
 ) -> TriageResponseOut:
-    submission = ClaimSubmission(
-        description=claim_input.description,
-        policy_type=policy_type,
-        image_data_urls=claim_input.image_data_urls,
-        document_text=claim_input.document_text,
-    )
-
     start_time = time.monotonic()
     result = await run_deterministic_triage(
-        submission=submission,
+        submission=claim_input.submission,
         claim_decision=claim_input.claim_decision,
         llm=llm,
         decision_client=decision_client,
-        client=client,
+        qdrant_client=qdrant_client,
         embedder=embedder,
         cost_table=cost_table,
         coverage_table=coverage_table,
@@ -162,8 +153,8 @@ async def _resolve_safe_triage_assessment(
         )
         safety_checks = await check_output_safety(
             decision_client,
-            triage_assessment[_DAMAGE_DESCRIPTION_ASSESSMENT_KEY],
-            triage_assessment[_RECOMMENDATION_ASSESSMENT_KEY],
+            triage_assessment[DAMAGE_DESCRIPTION_FIELD],
+            triage_assessment[RECOMMENDATION_FIELD],
         )
         attempt += 1
 

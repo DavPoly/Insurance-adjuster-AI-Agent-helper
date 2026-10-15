@@ -86,7 +86,7 @@ def _run_pipeline(
             claim_decision=claim_decision,
             llm=llm,
             decision_client=decision_client,
-            client=qdrant_client,
+            qdrant_client=qdrant_client,
             embedder=embedder,
             cost_table=FAKE_COST_TABLE,
             coverage_table=FAKE_COVERAGE_TABLE,

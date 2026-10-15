@@ -44,6 +44,10 @@ from app.constants.agent.deterministic_pipeline_step_names import (
     OUTPUT_SAFETY_STEP_NAME,
     TRIAGE_SYNTHESIS_STEP_NAME,
 )
+from app.constants.agent.triage_assessment_field_names import (
+    DAMAGE_DESCRIPTION_FIELD,
+    RECOMMENDATION_FIELD,
+)
 from app.constants.agent.triage_tool_names import (
     CHECK_COVERAGE_TOOL_NAME,
     ESTIMATE_REPAIR_COST_TOOL_NAME,
@@ -75,9 +79,6 @@ _SEARCH_QUERY_INPUT_KEY = "query"
 _POLICY_TYPE_INPUT_KEY = "policy_type"
 _INCIDENT_CATEGORY_INPUT_KEY = "incident_category"
 
-_DAMAGE_DESCRIPTION_KEY = "damage_description"
-_RECOMMENDATION_KEY = "recommendation"
-
 
 @dataclass
 class DeterministicTriageResult:
@@ -100,13 +101,13 @@ async def run_deterministic_triage(
     claim_decision: ClaimDecisionOut,
     llm: BaseChatModel,
     decision_client: DecisionModelClient,
-    client: QdrantClient,
+    qdrant_client: QdrantClient,
     embedder: ClaimEmbedder,
     cost_table: dict,
     coverage_table: dict,
 ) -> DeterministicTriageResult:
     """Run the fixed tools → synthesis → safety pipeline for one claim."""
-    past_claims = search_past_claims(submission.description, client, embedder)
+    past_claims = search_past_claims(submission.description, qdrant_client, embedder)
     repair_cost_estimate = estimate_repair_cost(
         claim_decision.damage_type.value,
         claim_decision.severity.value,
@@ -137,8 +138,8 @@ async def run_deterministic_triage(
 
     safety_checks = await check_output_safety(
         decision_client,
-        triage_assessment[_DAMAGE_DESCRIPTION_KEY],
-        triage_assessment[_RECOMMENDATION_KEY],
+        triage_assessment[DAMAGE_DESCRIPTION_FIELD],
+        triage_assessment[RECOMMENDATION_FIELD],
     )
     logger.info(
         "Deterministic triage: safety_checks_passed=%s", safety_checks_passed(safety_checks)

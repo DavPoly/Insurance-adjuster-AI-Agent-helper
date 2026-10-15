@@ -22,9 +22,7 @@ from app.routers.triage_exceptions import IntakeValidationFailed
 
 @dataclass
 class ParsedClaimInput:
-    image_data_urls: list[str]
-    description: str
-    document_text: str | None
+    submission: ClaimSubmission
     intake_validation: IntakeValidationOut
     claim_decision: ClaimDecisionOut
 
@@ -59,9 +57,7 @@ async def parse_and_validate_claim_input(
         )
 
     return ParsedClaimInput(
-        image_data_urls=image_data_urls,
-        description=stripped_description,
-        document_text=document_text,
+        submission=submission,
         intake_validation=intake_validation,
         claim_decision=claim_decision,
     )
