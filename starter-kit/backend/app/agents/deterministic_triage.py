@@ -29,7 +29,11 @@ from app.agents.safety_decision import check_output_safety
 from app.agents.schemas.claim_decision_schema import ClaimDecisionOut
 from app.agents.schemas.claim_submission import ClaimSubmission
 from app.agents.schemas.safety_checks_schema import SafetyChecksOut
-from app.agents.triage_synthesis import SynthesisToolResults, synthesize_triage_assessment
+from app.agents.triage_synthesis import (
+    SynthesisClaimContext,
+    SynthesisToolResults,
+    synthesize_triage_assessment,
+)
 from app.agents.utils.triage_agent_trace import (
     DeterministicStepRecord,
     build_deterministic_trace_steps,
@@ -84,14 +88,16 @@ _INCIDENT_CATEGORY_INPUT_KEY = "incident_category"
 class DeterministicTriageResult:
     """Everything the triage route consumes from one deterministic run.
 
-    ``classification`` and ``tool_results`` carry the explicit synthesis inputs so
-    the router's bounded safety retry can regenerate the draft without rerunning the
-    deterministic tools — the analogue of the retired agent's ``messages``.
+    ``claim_context``, ``classification``, and ``tool_results`` carry the explicit
+    synthesis inputs so the router's bounded safety retry can regenerate the draft
+    without rerunning the deterministic tools — the analogue of the retired
+    agent's ``messages``.
     """
 
     triage_assessment: dict
     safety_checks: SafetyChecksOut
     trace_steps: list[dict]
+    claim_context: SynthesisClaimContext
     classification: ClaimDecisionOut
     tool_results: SynthesisToolResults
 
@@ -134,7 +140,13 @@ async def run_deterministic_triage(
         similar_past_claims=past_claims,
         coverage=coverage,
     )
-    triage_assessment = synthesize_triage_assessment(llm, claim_decision, tool_results)
+    claim_context = SynthesisClaimContext(
+        claim_description=submission.description,
+        policy_type=submission.policy_type,
+    )
+    triage_assessment = synthesize_triage_assessment(
+        llm, claim_decision, tool_results, claim_context
+    )
 
     safety_checks = await check_output_safety(
         decision_client,
@@ -160,6 +172,7 @@ async def run_deterministic_triage(
         triage_assessment=triage_assessment,
         safety_checks=safety_checks,
         trace_steps=trace_steps,
+        claim_context=claim_context,
         classification=claim_decision,
         tool_results=tool_results,
     )

@@ -149,7 +149,7 @@ async def _resolve_safe_triage_assessment(
             MAX_SAFETY_CHECK_ATTEMPTS,
         )
         triage_assessment = synthesize_triage_assessment(
-            llm, result.classification, result.tool_results
+            llm, result.classification, result.tool_results, result.claim_context
         )
         safety_checks = await check_output_safety(
             decision_client,

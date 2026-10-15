@@ -1,10 +1,11 @@
-"""Synthesis seam: one LLM call over the explicit classification and tool results.
+"""Synthesis seam: one LLM call over the claim context, classification, and tool results.
 
-The deterministic orchestrator passes node 1's classification and the three
-deterministic tool results explicitly instead of a ReAct message history. This
-module renders that input for the single structured-output call and then stitches
-the deterministic fields (``damage_type`` / ``severity`` / ``affected_areas``,
-cost, and past claims) verbatim over the LLM's free text.
+The deterministic orchestrator passes the claimant's raw context (description and
+policy type), node 1's classification, and the three deterministic tool results
+explicitly instead of a ReAct message history. This module renders that input for
+the single structured-output call and then stitches the deterministic fields
+(``damage_type`` / ``severity`` / ``affected_areas``, cost, and past claims)
+verbatim over the LLM's free text.
 """
 
 import json
@@ -21,9 +22,26 @@ from app.constants.agent.triage_tool_names import (
     ESTIMATE_REPAIR_COST_TOOL_NAME,
     SEARCH_PAST_CLAIMS_TOOL_NAME,
 )
+from app.constants.claims.claim_taxonomy import PolicyType
 from app.constants.tools.cost_estimate_currency import DEFAULT_CURRENCY
 
+_CLAIM_CONTEXT_KEY = "claim_context"
+_CLAIM_DESCRIPTION_CONTEXT_KEY = "claim_description"
+_POLICY_TYPE_CONTEXT_KEY = "policy_type"
 _CLASSIFICATION_CONTEXT_KEY = "claim_classification"
+
+
+@dataclass(frozen=True)
+class SynthesisClaimContext:
+    """The claimant's own inputs the synthesis prose is grounded in.
+
+    The classification and tool results alone do not carry the raw claim
+    description or the policy type, so the draft's ``damage_description`` and
+    ``recommendation`` prose is grounded in this inert context as well.
+    """
+
+    claim_description: str
+    policy_type: PolicyType
 
 
 @dataclass(frozen=True)
@@ -44,13 +62,16 @@ def synthesize_triage_assessment(
     llm: BaseChatModel,
     classification: ClaimDecisionOut,
     tool_results: SynthesisToolResults,
+    claim_context: SynthesisClaimContext,
 ) -> dict:
-    """One LLM call over the explicit classification and tool results."""
+    """One LLM call over the claim context, classification, and tool results."""
     structured_llm = llm.with_structured_output(TriageAssessmentOut)
     draft: TriageAssessmentOut = structured_llm.invoke(
         [
             SystemMessage(content=TRIAGE_SYNTHESIS_SYSTEM_PROMPT),
-            HumanMessage(content=_render_synthesis_input(classification, tool_results)),
+            HumanMessage(
+                content=_render_synthesis_input(classification, tool_results, claim_context)
+            ),
         ]
     )
     assessment = draft.model_dump(mode="json")
@@ -67,11 +88,17 @@ def synthesize_triage_assessment(
 
 
 def _render_synthesis_input(
-    classification: ClaimDecisionOut, tool_results: SynthesisToolResults
+    classification: ClaimDecisionOut,
+    tool_results: SynthesisToolResults,
+    claim_context: SynthesisClaimContext,
 ) -> str:
     """Render the explicit inputs as the single synthesis message the LLM reads."""
     return json.dumps(
         {
+            _CLAIM_CONTEXT_KEY: {
+                _CLAIM_DESCRIPTION_CONTEXT_KEY: claim_context.claim_description,
+                _POLICY_TYPE_CONTEXT_KEY: claim_context.policy_type.value,
+            },
             _CLASSIFICATION_CONTEXT_KEY: classification.model_dump(mode="json"),
             ESTIMATE_REPAIR_COST_TOOL_NAME: tool_results.repair_cost_estimate,
             SEARCH_PAST_CLAIMS_TOOL_NAME: tool_results.similar_past_claims,

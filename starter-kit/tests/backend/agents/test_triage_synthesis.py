@@ -18,7 +18,11 @@ from app.agents.schemas.triage_assessment_schema import (
     SimilarPastClaimOut,
     TriageAssessmentOut,
 )
-from app.agents.triage_synthesis import SynthesisToolResults, synthesize_triage_assessment
+from app.agents.triage_synthesis import (
+    SynthesisClaimContext,
+    SynthesisToolResults,
+    synthesize_triage_assessment,
+)
 from app.constants.agent.triage_tool_names import (
     CHECK_COVERAGE_TOOL_NAME,
     ESTIMATE_REPAIR_COST_TOOL_NAME,
@@ -26,6 +30,7 @@ from app.constants.agent.triage_tool_names import (
 )
 from app.constants.claims.claim_taxonomy import (
     DamageType,
+    PolicyType,
     SeverityLevel,
     UrgencyLevel,
 )
@@ -33,6 +38,9 @@ from app.constants.tools.cost_estimate_currency import DEFAULT_CURRENCY
 
 FAKE_DRAFTED_REPAIR_COST_MIN = 1
 FAKE_DRAFTED_REPAIR_COST_MAX = 2
+
+FAKE_CLAIM_DESCRIPTION = "Water is pooling under the kitchen sink after a pipe burst."
+FAKE_POLICY_TYPE = PolicyType.STANDARD_HOMEOWNER
 
 FAKE_TOOL_ESTIMATE = {"min": 2000, "max": 8000, "currency": DEFAULT_CURRENCY}
 FAKE_COVERAGE_RESULT = {
@@ -86,6 +94,15 @@ def _build_tool_results(**overrides) -> SynthesisToolResults:
     return SynthesisToolResults(**values)
 
 
+def _build_claim_context(**overrides) -> SynthesisClaimContext:
+    values: dict = {
+        "claim_description": FAKE_CLAIM_DESCRIPTION,
+        "policy_type": FAKE_POLICY_TYPE,
+    }
+    values.update(overrides)
+    return SynthesisClaimContext(**values)
+
+
 def _build_draft(similar_past_claims: list[SimilarPastClaimOut]) -> TriageAssessmentOut:
     return TriageAssessmentOut(
         damage_type=FAKE_CLASSIFICATION_DAMAGE_TYPE,
@@ -115,7 +132,9 @@ def test_synthesize_triage_assessment_stitches_cost_and_scope_fields_verbatim():
     )
     llm = FakeTriageChatModel(structured_output_value=draft)
 
-    assessment = synthesize_triage_assessment(llm, _build_classification(), _build_tool_results())
+    assessment = synthesize_triage_assessment(
+        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    )
 
     assert assessment["estimated_repair_cost"] == FAKE_TOOL_ESTIMATE
     assert assessment["damage_type"] == FAKE_CLASSIFICATION_DAMAGE_TYPE.value
@@ -147,7 +166,9 @@ def test_synthesize_triage_assessment_overrides_scope_fields_from_the_classifica
     )
     llm = FakeTriageChatModel(structured_output_value=drifted_draft)
 
-    assessment = synthesize_triage_assessment(llm, _build_classification(), _build_tool_results())
+    assessment = synthesize_triage_assessment(
+        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    )
 
     assert assessment["damage_type"] == FAKE_CLASSIFICATION_DAMAGE_TYPE.value
     assert assessment["severity"] == FAKE_CLASSIFICATION_SEVERITY.value
@@ -157,7 +178,9 @@ def test_synthesize_triage_assessment_overrides_scope_fields_from_the_classifica
 def test_synthesize_triage_assessment_falls_back_to_a_generated_summary_for_unmatched_claims():
     llm = FakeTriageChatModel(structured_output_value=_build_draft([]))
 
-    assessment = synthesize_triage_assessment(llm, _build_classification(), _build_tool_results())
+    assessment = synthesize_triage_assessment(
+        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    )
 
     assert assessment["similar_past_claims"] == [
         {
@@ -183,7 +206,9 @@ def test_synthesize_triage_assessment_drops_a_past_claim_the_llm_invented():
         )
     )
 
-    assessment = synthesize_triage_assessment(llm, _build_classification(), _build_tool_results())
+    assessment = synthesize_triage_assessment(
+        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    )
 
     assert [claim["claim_id"] for claim in assessment["similar_past_claims"]] == [
         FAKE_PAST_CLAIM_RECORD["claim_id"]
@@ -193,7 +218,9 @@ def test_synthesize_triage_assessment_drops_a_past_claim_the_llm_invented():
 def test_synthesize_triage_assessment_grounds_the_prompt_in_the_supplied_results():
     llm = FakeTriageChatModel(structured_output_value=_build_draft([]))
 
-    synthesize_triage_assessment(llm, _build_classification(), _build_tool_results())
+    synthesize_triage_assessment(
+        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    )
 
     system_message, context_message = llm.structured_output_messages
     assert system_message.content == TRIAGE_SYNTHESIS_SYSTEM_PROMPT
@@ -201,3 +228,5 @@ def test_synthesize_triage_assessment_grounds_the_prompt_in_the_supplied_results
     assert context[ESTIMATE_REPAIR_COST_TOOL_NAME] == FAKE_TOOL_ESTIMATE
     assert context[SEARCH_PAST_CLAIMS_TOOL_NAME] == [FAKE_PAST_CLAIM_RECORD]
     assert context[CHECK_COVERAGE_TOOL_NAME] == FAKE_COVERAGE_RESULT
+    assert FAKE_CLAIM_DESCRIPTION in context_message.content
+    assert FAKE_POLICY_TYPE.value in context_message.content
