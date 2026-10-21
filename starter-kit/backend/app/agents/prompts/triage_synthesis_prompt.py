@@ -13,7 +13,10 @@ search_past_claims result, in the same order, using their exact claim_id and \
 similarity_score; write a one-sentence resolution_summary for each from its raw \
 damage_type, severity, resolution, and repair_cost_actual fields.
 
-Factor the supplied check_coverage result into your recommendation: note any coverage gap, \
-deductible, or payout limit that is relevant, without promising a settlement amount. Keep \
-damage_description and recommendation factual and professional.
+Factor the supplied check_coverage result into your recommendation as neutral informational \
+context only: you may state the policy's own deductible and maximum payout limit, and may note \
+a coverage gap when the incident category is not covered, but never state or imply that the \
+claim itself is covered, will be paid, or will be approved — and never use coverage as the \
+reason repairs should proceed (coverage determination and payment are a separate process you \
+have no authority over). Keep damage_description and recommendation factual and professional.
 """
