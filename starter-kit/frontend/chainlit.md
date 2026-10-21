@@ -43,10 +43,15 @@ worst case if the safety-retry path is exhausted. Observability is kept:
 them (6 operations × reason/act/observe) reconstructed from the pipeline's step
 records rather than a model's message history.
 
+Measured on the 35-case development set, the median end-to-end triage latency
+fell from 18.5 s to 5.4 s, and the auto-grader scores 13.57/14 with every check
+passing (two UI checks skip pending browser review).
+
 ## Next steps
 
-- Re-measure end-to-end latency and re-run the grader on the deterministic
-  pipeline; the numbers in `RESULTS.md` predate this refactor.
+- Search past claims with a query built from the intake classification when
+  no description is submitted; an image-only claim currently searches with an
+  empty description.
 - Move claim/trace storage to durable, shared storage if this grows beyond a
   single-session demo.
 - Revisit combined vs. separate description/notes embeddings if the

@@ -33,11 +33,13 @@ API: `http://localhost:8000/api/v1/health` · UI: `http://localhost:3000`.
 
 - **Vector DB: Qdrant**, as provided by the starter kit's `docker-compose.yml`; not swapped, since it was already a good fit.
 
-Retrieval quality for `search_past_claims` itself (independent of the auto-grader's own RAG checks) is measured by `make eval` (`starter-kit/backend/evals/`): 14 hand-written adjuster-style queries, phrased generally rather than reusing the exact nouns a knowledge-base record uses for itself, run against the real knowledge base and the real embedding model. Current result: Recall@5 100%, MRR 0.952 — see `RESULTS.md`.
+Retrieval quality for `search_past_claims` itself (independent of the auto-grader's own RAG checks) is measured by `make eval` (`starter-kit/backend/evals/`): 14 hand-written adjuster-style queries, phrased generally rather than reusing the exact nouns a knowledge-base record uses for itself, run against the real knowledge base and the real embedding model. Current result, re-run after the deterministic refactor: Recall@5 100%, MRR 0.952 — see `RESULTS.md`.
 
 ## Key design decisions / trade-offs
 
 - **A deterministic pipeline with a fixed nominal model-call budget** (1 generative LLM call + 2 Jev decision calls per successful pass, rising to a bounded worst case of 3 LLM calls + 4 Jev calls if the output-safety retries are exhausted), replacing the previous LLM-driven ReAct loop. The tool sequence is fully determined by the claim's own fields once intake has run, so routing it deterministically drops the loop's per-step reasoning calls without losing the observable trace. See the deep dive below and [`.plans/deterministic-jev-pipeline-plan.md`](.plans/deterministic-jev-pipeline-plan.md).
+
+- **Repair-cost inputs are constrained in code and in the decision criteria.** The estimate is the per-area cost for `damage_type` × `severity`, multiplied by the number of affected areas, so both inputs swing it several-fold. Node 1 keeps only the most specific area labels (a room or component wins over its `wall`/`ceiling`, which wins over `interior`/`exterior`; `rear_window` wins over `windows`), and each severity level carries its own definition in the Jev choice criteria. Those definitions draw the line by repair scope, not by how many rooms are hit, because the area count already scales the estimate. The definitions were calibrated against the provided development set, so accuracy on unseen claims is likely lower.
 
 - **Synthesis stays its own LLM call** rather than being folded into a decision node, so the structured-output schema call stays isolated from the deterministic steps and the safety-retry path (below) can regenerate just the assessment from the carried classification and tool results, without re-running the tools.
 
@@ -55,9 +57,11 @@ The previous design drove every "intelligent" step with an LLM: intake validatio
 
 That recommendation is now implemented (Diagram 2, column B). The ReAct loop and its LangGraph `StateGraph` were removed and replaced by the five-stage pipeline above: one multimodal Jev 1.14 decision call for intake and parameter extraction, the three tools called directly, one generative synthesis call, and one text-only Jev 1.14 decision call for output safety. Jev returns typed answers with calibrated probabilities and no free text, is served through OpenRouter's Decisions API on the existing `OPENROUTER_API_KEY`, and — per its provider — answers in roughly 200–300 ms while billing on input tokens only. The observability the loop provided is kept: `GET /api/v1/agent/trace/{id}` still returns `reason`→`act`→`observe` steps, now 18 of them (6 operations × reason/act/observe) reconstructed from the pipeline's step records rather than from a model's message history.
 
+Measured on the full 35-case development set (`make grade`), the median end-to-end triage latency fell from 18.5 s with the ReAct loop to 5.4 s with the pipeline, and the auto-grader scores 13.57/14 with every check passing (two UI checks skip pending browser review). Details are in `RESULTS.md`.
+
 ## Next steps
 
-- Re-measure end-to-end latency and re-run the grader on the deterministic pipeline in the grading environment (`make grade`, `make eval`); the figures in `RESULTS.md` predate this refactor.
+- Search past claims with a query built from the node-1 classification when no description is submitted. An image-only claim currently searches with an empty description, so its "similar past claims" are the same for every photo.
 - Move claim/trace storage to durable, shared storage if this goes beyond a single-session demo.
 - Revisit combined vs. separate description/notes embeddings if the historical-claims corpus grows large enough for retrieval relevance to matter more.
 
