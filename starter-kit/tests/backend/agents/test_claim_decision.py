@@ -58,6 +58,7 @@ from app.constants.claims.overlapping_component_areas import (
     SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA,
 )
 from app.constants.claims.severity_classification_rubric import SEVERITY_CLASSIFICATION_RUBRIC
+from app.constants.claims.severity_level_definitions import SEVERITY_LEVEL_DEFINITIONS
 from app.constants.claims.surface_area_alias_vocabulary import SURFACE_AREA_ALIASES
 from app.constants.decision.decision_model_config import DECISION_PROBABILITY_THRESHOLD
 from app.constants.intake.intake_validation_messages import (
@@ -458,12 +459,9 @@ def test_describe_claim_decision_failure_maps_each_intake_gate(
     assert describe_claim_decision_failure(decision, has_required_input) == expected_message
 
 
-def test_damage_type_and_severity_choice_criteria_are_derived_from_the_enums():
+def test_damage_type_choice_criteria_are_derived_from_the_enum():
     assert CLAIM_DECISION_QUESTIONS[DAMAGE_TYPE_QUESTION_ID]["criteria"] == {
         damage_type.value: damage_type.value for damage_type in DamageType
-    }
-    assert CLAIM_DECISION_QUESTIONS[SEVERITY_QUESTION_ID]["criteria"] == {
-        severity.value: severity.value for severity in SeverityLevel
     }
 
 
@@ -489,3 +487,9 @@ def test_questions_reuse_the_area_counting_rule_and_severity_rubric():
         in CLAIM_DECISION_QUESTIONS[affected_area_question_id(area)]["instructions"]
         for area in AFFECTED_AREA_VOCABULARY
     )
+
+
+def test_severity_criteria_define_every_level():
+    assert CLAIM_DECISION_QUESTIONS[SEVERITY_QUESTION_ID]["criteria"] == {
+        severity.value: SEVERITY_LEVEL_DEFINITIONS[severity] for severity in SeverityLevel
+    }

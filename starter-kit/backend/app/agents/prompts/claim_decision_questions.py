@@ -11,16 +11,18 @@ One decision call answers, against a single multimodal state:
 
 Every Noul is phrased so its "yes" answer means the flag holds; node 1 reads a
 Noul probability at or above ``DECISION_PROBABILITY_THRESHOLD`` as yes. The
-Choice criteria are derived from the enums programmatically rather than re-typed,
-and the area questions carry :data:`AREA_COUNTING_RULE` and the severity question
-carries :data:`SEVERITY_CLASSIFICATION_RUBRIC` so Jev applies the same rules the
-old ReAct prompt did.
+Choice criteria are derived from the enums programmatically rather than re-typed;
+the ``damage_type`` criteria are the bare labels, while each ``severity``
+criterion carries its level's definition from
+:data:`SEVERITY_LEVEL_DEFINITIONS`, with :data:`SEVERITY_CLASSIFICATION_RUBRIC`
+as the shared instruction. The area questions carry :data:`AREA_COUNTING_RULE`.
 """
 
 from app.constants.claims.affected_area_vocabulary import AFFECTED_AREA_VOCABULARY
 from app.constants.claims.area_counting_rule import AREA_COUNTING_RULE
 from app.constants.claims.claim_taxonomy import DamageType, SeverityLevel
 from app.constants.claims.severity_classification_rubric import SEVERITY_CLASSIFICATION_RUBRIC
+from app.constants.claims.severity_level_definitions import SEVERITY_LEVEL_DEFINITIONS
 
 NOUL_QUESTION_TYPE = "noul"
 CHOICE_QUESTION_TYPE = "choice"
@@ -145,7 +147,9 @@ CLAIM_DECISION_QUESTIONS: dict[str, dict] = {
         "instructions": (
             f"Classify the physical extent of the damage. {SEVERITY_CLASSIFICATION_RUBRIC}"
         ),
-        "criteria": {severity.value: severity.value for severity in SeverityLevel},
+        "criteria": {
+            severity.value: SEVERITY_LEVEL_DEFINITIONS[severity] for severity in SeverityLevel
+        },
     },
     **{affected_area_question_id(area): _area_question(area) for area in AFFECTED_AREA_VOCABULARY},
 }
