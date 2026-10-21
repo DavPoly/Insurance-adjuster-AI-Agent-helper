@@ -17,6 +17,7 @@ from claim_decision_test_fixtures import (
     FAKE_POLICY_TYPE,
     FAKE_SECOND_IMAGE_DATA_URL,
     FAKE_SEVERITY,
+    FAKE_SPECIFIC_AREA,
     IMAGE_URL_PART_KEY,
     IMAGE_URL_PART_TYPE,
     IMAGE_URL_PART_URL_KEY,
@@ -52,7 +53,12 @@ from app.agents.schemas.claim_submission import ClaimSubmission
 from app.constants.claims.affected_area_vocabulary import AFFECTED_AREA_VOCABULARY
 from app.constants.claims.area_counting_rule import AREA_COUNTING_RULE
 from app.constants.claims.claim_taxonomy import DamageType, SeverityLevel
+from app.constants.claims.generic_area_alias_vocabulary import GENERIC_AREA_ALIASES
+from app.constants.claims.overlapping_component_areas import (
+    SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA,
+)
 from app.constants.claims.severity_classification_rubric import SEVERITY_CLASSIFICATION_RUBRIC
+from app.constants.claims.surface_area_alias_vocabulary import SURFACE_AREA_ALIASES
 from app.constants.decision.decision_model_config import DECISION_PROBABILITY_THRESHOLD
 from app.constants.intake.intake_validation_messages import (
     IMAGE_NOT_CLEAR_MESSAGE,
@@ -174,6 +180,141 @@ def test_decide_claim_builds_image_parts_for_an_image_only_submission():
     assert decision.affected_areas == ["garage"]
     assert len(_image_parts(client.observed_state)) == 1
     assert client.call_count == 1
+
+
+@pytest.mark.parametrize("generic_alias", GENERIC_AREA_ALIASES)
+def test_decide_claim_drops_a_generic_alias_flagged_alongside_a_specific_area(generic_alias):
+    client = _build_client(
+        noul_answers={
+            **_passing_intake_noul_answers(),
+            affected_area_question_id(FAKE_SPECIFIC_AREA): PASSING_NOUL_PROBABILITY,
+            affected_area_question_id(generic_alias): PASSING_NOUL_PROBABILITY,
+        }
+    )
+
+    decision = _run_decide_claim(client, _submission())
+
+    assert decision.affected_areas == [FAKE_SPECIFIC_AREA]
+
+
+@pytest.mark.parametrize("generic_alias", GENERIC_AREA_ALIASES)
+def test_decide_claim_keeps_a_generic_alias_flagged_alone(generic_alias):
+    client = _build_client(
+        noul_answers={
+            **_passing_intake_noul_answers(),
+            affected_area_question_id(generic_alias): PASSING_NOUL_PROBABILITY,
+        }
+    )
+
+    decision = _run_decide_claim(client, _submission())
+
+    assert decision.affected_areas == [generic_alias]
+
+
+@pytest.mark.parametrize("surface_alias", SURFACE_AREA_ALIASES)
+def test_decide_claim_drops_a_surface_alias_flagged_alongside_a_specific_area(surface_alias):
+    client = _build_client(
+        noul_answers={
+            **_passing_intake_noul_answers(),
+            affected_area_question_id(FAKE_SPECIFIC_AREA): PASSING_NOUL_PROBABILITY,
+            affected_area_question_id(surface_alias): PASSING_NOUL_PROBABILITY,
+        }
+    )
+
+    decision = _run_decide_claim(client, _submission())
+
+    assert decision.affected_areas == [FAKE_SPECIFIC_AREA]
+
+
+@pytest.mark.parametrize("surface_alias", SURFACE_AREA_ALIASES)
+def test_decide_claim_keeps_a_surface_alias_flagged_alone(surface_alias):
+    client = _build_client(
+        noul_answers={
+            **_passing_intake_noul_answers(),
+            affected_area_question_id(surface_alias): PASSING_NOUL_PROBABILITY,
+        }
+    )
+
+    decision = _run_decide_claim(client, _submission())
+
+    assert decision.affected_areas == [surface_alias]
+
+
+@pytest.mark.parametrize("surface_alias", SURFACE_AREA_ALIASES)
+@pytest.mark.parametrize("generic_alias", GENERIC_AREA_ALIASES)
+def test_decide_claim_drops_a_generic_alias_flagged_alongside_a_surface_alias(
+    surface_alias, generic_alias
+):
+    client = _build_client(
+        noul_answers={
+            **_passing_intake_noul_answers(),
+            affected_area_question_id(surface_alias): PASSING_NOUL_PROBABILITY,
+            affected_area_question_id(generic_alias): PASSING_NOUL_PROBABILITY,
+        }
+    )
+
+    decision = _run_decide_claim(client, _submission())
+
+    assert decision.affected_areas == [surface_alias]
+
+
+@pytest.mark.parametrize(
+    ("broader_area", "specific_area"), SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA.items()
+)
+def test_decide_claim_drops_a_broader_component_flagged_alongside_its_specific_form(
+    broader_area, specific_area
+):
+    client = _build_client(
+        noul_answers={
+            **_passing_intake_noul_answers(),
+            affected_area_question_id(broader_area): PASSING_NOUL_PROBABILITY,
+            affected_area_question_id(specific_area): PASSING_NOUL_PROBABILITY,
+        }
+    )
+
+    decision = _run_decide_claim(client, _submission())
+
+    assert decision.affected_areas == [specific_area]
+
+
+@pytest.mark.parametrize("broader_area", SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA)
+def test_decide_claim_keeps_a_broader_component_flagged_alone(broader_area):
+    client = _build_client(
+        noul_answers={
+            **_passing_intake_noul_answers(),
+            affected_area_question_id(broader_area): PASSING_NOUL_PROBABILITY,
+        }
+    )
+
+    decision = _run_decide_claim(client, _submission())
+
+    assert decision.affected_areas == [broader_area]
+
+
+def test_decide_claim_applies_every_area_filter_together():
+    broader_area, specific_area = next(iter(SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA.items()))
+    flagged_areas = (broader_area, specific_area, *SURFACE_AREA_ALIASES, *GENERIC_AREA_ALIASES)
+    client = _build_client(
+        noul_answers={
+            **_passing_intake_noul_answers(),
+            **{affected_area_question_id(area): PASSING_NOUL_PROBABILITY for area in flagged_areas},
+        }
+    )
+
+    decision = _run_decide_claim(client, _submission())
+
+    assert decision.affected_areas == [specific_area]
+
+
+def test_area_filter_constants_name_only_vocabulary_areas():
+    filter_areas = {
+        *SURFACE_AREA_ALIASES,
+        *GENERIC_AREA_ALIASES,
+        *SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA,
+        *SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA.values(),
+    }
+
+    assert filter_areas <= set(AFFECTED_AREA_VOCABULARY)
 
 
 @pytest.mark.parametrize(

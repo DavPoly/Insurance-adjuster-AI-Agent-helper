@@ -24,3 +24,4 @@ FAKE_SECOND_IMAGE_DATA_URL = "data:image/png;base64,ZmFrZS1zZWNvbmQtcGhvdG8="
 FAKE_DAMAGE_TYPE = DamageType.WATER_DAMAGE
 FAKE_SEVERITY = SeverityLevel.MODERATE
 FAKE_AFFECTED_AREAS = ("kitchen", "dining_room")
+FAKE_SPECIFIC_AREA = "garage"

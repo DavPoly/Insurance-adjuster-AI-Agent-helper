@@ -26,6 +26,11 @@ from app.agents.schemas.claim_decision_schema import ClaimDecisionOut
 from app.agents.schemas.claim_submission import ClaimSubmission
 from app.constants.claims.affected_area_vocabulary import AFFECTED_AREA_VOCABULARY
 from app.constants.claims.claim_taxonomy import DamageType, SeverityLevel
+from app.constants.claims.generic_area_alias_vocabulary import GENERIC_AREA_ALIASES
+from app.constants.claims.overlapping_component_areas import (
+    SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA,
+)
+from app.constants.claims.surface_area_alias_vocabulary import SURFACE_AREA_ALIASES
 from app.constants.intake.intake_validation_messages import (
     IMAGE_NOT_CLEAR_MESSAGE,
     MISSING_INPUT_MESSAGE,
@@ -126,11 +131,39 @@ def _build_claim_state_text(submission: ClaimSubmission) -> str:
 
 
 def _extract_affected_areas(answers: dict[str, dict]) -> list[str]:
-    return [
+    """Flagged areas, enforcing :data:`AREA_COUNTING_RULE` deterministically.
+
+    Jev scores each area as an independent per-question probability with no
+    visibility into the other areas' answers, so it cannot reliably avoid
+    flagging an alias of an area that is already flagged, and every extra area
+    multiplies the repair estimate. Three rules keep one entry per distinct area:
+
+    - a broader component (``windows``) is dropped when its specific form
+      (``rear_window``) is also flagged;
+    - surface aliases (``wall``/``ceiling``) are dropped when any specific room
+      or component is flagged;
+    - generic aliases (``interior``/``exterior``) are dropped when any specific
+      area or surface alias is flagged.
+
+    The least specific tier is kept only when nothing more specific was flagged.
+    """
+    flagged = [
         area
         for area in AFFECTED_AREA_VOCABULARY
         if noul_answer_is_yes(answers, affected_area_question_id(area))
     ]
+    flagged = [
+        area for area in flagged if SPECIFIC_COMPONENT_AREA_BY_BROADER_AREA.get(area) not in flagged
+    ]
+    specific_areas = [
+        area
+        for area in flagged
+        if area not in SURFACE_AREA_ALIASES and area not in GENERIC_AREA_ALIASES
+    ]
+    if specific_areas:
+        return specific_areas
+    surface_areas = [area for area in flagged if area in SURFACE_AREA_ALIASES]
+    return surface_areas if surface_areas else flagged
 
 
 def _missing_input_decision() -> ClaimDecisionOut:
