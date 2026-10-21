@@ -119,7 +119,10 @@ paths:
 
   /api/v1/agent/trace/{claim_id}:
     get:
-      summary: Get the ReAct execution trace for a triage run
+      # Deviation from the published contract wording, approved in the deterministic-pipeline
+      # plan: the reason/act/observe trace is now produced by the deterministic pipeline, not
+      # by a ReAct model loop. Only the wording below changed; the AgentTrace schema is unchanged.
+      summary: Get the triage execution trace for a triage run
       operationId: getAgentTrace
       parameters:
         - name: claim_id
@@ -129,7 +132,7 @@ paths:
             type: string
       responses:
         "200":
-          description: Agent execution trace
+          description: Triage execution trace
           content:
             application/json:
               schema:
