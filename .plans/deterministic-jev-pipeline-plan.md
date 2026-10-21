@@ -8,6 +8,8 @@ deterministic pipeline recommended in `README.md` and `starter-kit/frontend/chai
 OpenRouter) for the two structured-decision nodes and keeping a **single generative LLM
 call** for synthesis.
 
+Status: done — implemented Oct 15, 2026 (commits 1456908 … 802e861).
+
 ## Target architecture (top to bottom)
 
 ```
@@ -215,3 +217,31 @@ Keep: `app/constants/agent/triage_tool_names.py` (trace labels), `safety_check_r
 - **Removed ReAct category** — already reflected in `auto-grader/grade.py` (max auto 14);
   this plan is consistent with that decision. The reconstructed `reason/act/observe` trace
   is deterministic, not model-in-the-loop; `RESULTS.md` should note this explicitly.
+
+## Decisions log (implementation)
+
+- **Execution order swapped:** Phase 7 (ReAct deletion) ran before Phase 6 (synthesis
+  simplification) so the signature change had no live callers to bridge.
+- **`affected_areas`:** one Noul per candidate area from `AFFECTED_AREA_VOCABULARY` (30 areas
+  grounded in `data/ground-truth` + knowledge-base; `dining_room` required by the auto-grader
+  multimodal case).
+- **Intake/safety booleans:** thresholded `>= DECISION_PROBABILITY_THRESHOLD` via shared
+  `noul_answer_is_yes` (descriptive `ValueError`s naming the question id on malformed answers).
+- **Decisions API only:** the System One fallback was skipped — `decision_model_client.py`
+  isolates the wire format, switchable in one file.
+- **Intake pass/fail + the five rejection messages** reimplemented in `claim_decision.py` (not
+  imported from `intake_validator.py`) — removed the Phase-7 deletion landmine.
+- **Node 1 sees the document text:** single-pass PDF extraction in `claim_input_parsing.py`,
+  threaded via `ParsedClaimInput`.
+- **Trace:** `build_deterministic_trace_steps` renders 18 steps (6 operations ×
+  reason/act/observe); `trace_metadata_keys.py` deleted after Phase 7 left it orphaned; the
+  router rewrites the synthesis/safety observe steps to the final verdict after a safety retry.
+- **Synthesis:** explicit `(classification, tool_results)` per the frozen interface, PLUS an
+  approved post-review deviation: `SynthesisClaimContext(claim_description, policy_type)`
+  threads the raw description/policy type as grounding (manual-review prose fidelity; verbatim
+  stitching unchanged — stitched fields overwrite the LLM free text).
+- **Safety retry:** router-level bounded loop, cap `MAX_SAFETY_CHECK_ATTEMPTS` (3) → 422;
+  `safety_checks_passed` relocated to `deterministic_triage.py`.
+- **Tests:** shared `tests/backend/agents/fake_decision_model_client.py`; wire-format literals
+  deliberately re-declared in fixtures (non-tautological payload assertions, rationale
+  documented at the shared fake).
