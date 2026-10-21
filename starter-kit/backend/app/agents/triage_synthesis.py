@@ -58,7 +58,7 @@ class SynthesisToolResults:
     coverage: dict
 
 
-def synthesize_triage_assessment(
+async def synthesize_triage_assessment(
     llm: BaseChatModel,
     classification: ClaimDecisionOut,
     tool_results: SynthesisToolResults,
@@ -66,7 +66,7 @@ def synthesize_triage_assessment(
 ) -> dict:
     """One LLM call over the claim context, classification, and tool results."""
     structured_llm = llm.with_structured_output(TriageAssessmentOut)
-    draft: TriageAssessmentOut = structured_llm.invoke(
+    draft: TriageAssessmentOut = await structured_llm.ainvoke(
         [
             SystemMessage(content=TRIAGE_SYNTHESIS_SYSTEM_PROMPT),
             HumanMessage(

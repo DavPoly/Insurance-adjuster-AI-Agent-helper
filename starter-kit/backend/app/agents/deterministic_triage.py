@@ -144,7 +144,7 @@ async def run_deterministic_triage(
         claim_description=submission.description,
         policy_type=submission.policy_type,
     )
-    triage_assessment = synthesize_triage_assessment(
+    triage_assessment = await synthesize_triage_assessment(
         llm, claim_decision, tool_results, claim_context
     )
 

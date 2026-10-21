@@ -267,8 +267,10 @@ def test_run_deterministic_triage_returns_a_failing_safety_result_for_the_router
     assert result.safety_checks.no_coverage_promises is False
     # The router's bounded retry regenerates from the carried explicit inputs.
     assert (
-        synthesize_triage_assessment(
-            llm, result.classification, result.tool_results, result.claim_context
+        asyncio.run(
+            synthesize_triage_assessment(
+                llm, result.classification, result.tool_results, result.claim_context
+            )
         )
         == result.triage_assessment
     )

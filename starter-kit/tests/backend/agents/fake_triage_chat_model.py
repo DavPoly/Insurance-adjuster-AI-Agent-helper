@@ -32,6 +32,9 @@ class _FakeStructuredOutputRunnable:
         self._owner.structured_output_messages = messages
         return self._value
 
+    async def ainvoke(self, messages):
+        return self.invoke(messages)
+
 
 class CountingTriageChatModel(FakeTriageChatModel):
     """A ``FakeTriageChatModel`` that also counts its structured-output calls.
@@ -63,3 +66,7 @@ class _CountingStructuredOutputRunnable:
     def invoke(self, messages):
         self._owner.structured_output_invoke_count += 1
         return self._runnable.invoke(messages)
+
+    async def ainvoke(self, messages):
+        self._owner.structured_output_invoke_count += 1
+        return await self._runnable.ainvoke(messages)

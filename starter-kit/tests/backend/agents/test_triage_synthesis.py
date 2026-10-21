@@ -7,6 +7,7 @@ grounded in the supplied tool results, and that a claim ID the LLM invents is
 dropped in favour of the supplied result.
 """
 
+import asyncio
 import json
 
 from fake_triage_chat_model import FakeTriageChatModel
@@ -132,8 +133,10 @@ def test_synthesize_triage_assessment_stitches_cost_and_scope_fields_verbatim():
     )
     llm = FakeTriageChatModel(structured_output_value=draft)
 
-    assessment = synthesize_triage_assessment(
-        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    assessment = asyncio.run(
+        synthesize_triage_assessment(
+            llm, _build_classification(), _build_tool_results(), _build_claim_context()
+        )
     )
 
     assert assessment["estimated_repair_cost"] == FAKE_TOOL_ESTIMATE
@@ -166,8 +169,10 @@ def test_synthesize_triage_assessment_overrides_scope_fields_from_the_classifica
     )
     llm = FakeTriageChatModel(structured_output_value=drifted_draft)
 
-    assessment = synthesize_triage_assessment(
-        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    assessment = asyncio.run(
+        synthesize_triage_assessment(
+            llm, _build_classification(), _build_tool_results(), _build_claim_context()
+        )
     )
 
     assert assessment["damage_type"] == FAKE_CLASSIFICATION_DAMAGE_TYPE.value
@@ -178,8 +183,10 @@ def test_synthesize_triage_assessment_overrides_scope_fields_from_the_classifica
 def test_synthesize_triage_assessment_falls_back_to_a_generated_summary_for_unmatched_claims():
     llm = FakeTriageChatModel(structured_output_value=_build_draft([]))
 
-    assessment = synthesize_triage_assessment(
-        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    assessment = asyncio.run(
+        synthesize_triage_assessment(
+            llm, _build_classification(), _build_tool_results(), _build_claim_context()
+        )
     )
 
     assert assessment["similar_past_claims"] == [
@@ -206,8 +213,10 @@ def test_synthesize_triage_assessment_drops_a_past_claim_the_llm_invented():
         )
     )
 
-    assessment = synthesize_triage_assessment(
-        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    assessment = asyncio.run(
+        synthesize_triage_assessment(
+            llm, _build_classification(), _build_tool_results(), _build_claim_context()
+        )
     )
 
     assert [claim["claim_id"] for claim in assessment["similar_past_claims"]] == [
@@ -218,8 +227,10 @@ def test_synthesize_triage_assessment_drops_a_past_claim_the_llm_invented():
 def test_synthesize_triage_assessment_grounds_the_prompt_in_the_supplied_results():
     llm = FakeTriageChatModel(structured_output_value=_build_draft([]))
 
-    synthesize_triage_assessment(
-        llm, _build_classification(), _build_tool_results(), _build_claim_context()
+    asyncio.run(
+        synthesize_triage_assessment(
+            llm, _build_classification(), _build_tool_results(), _build_claim_context()
+        )
     )
 
     system_message, context_message = llm.structured_output_messages
