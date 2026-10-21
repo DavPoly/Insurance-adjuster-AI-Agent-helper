@@ -104,6 +104,17 @@ def test_decide_raises_on_non_success_response():
         asyncio.run(build_client(transport).decide(FAKE_CLAIM_STATE, FAKE_QUESTIONS))
 
 
+def test_decide_raises_after_the_client_is_closed():
+    client = build_client(RecordingDecisionTransport(FAKE_SUCCESS_RESPONSE_BODY))
+
+    async def close_then_decide():
+        await client.aclose()
+        await client.decide(FAKE_CLAIM_STATE, FAKE_QUESTIONS)
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(close_then_decide())
+
+
 def test_decide_defaults_to_the_configured_model_and_endpoint():
     transport = RecordingDecisionTransport(FAKE_SUCCESS_RESPONSE_BODY)
     client = DecisionModelClient(api_key=FAKE_OPENROUTER_API_KEY, transport=transport)

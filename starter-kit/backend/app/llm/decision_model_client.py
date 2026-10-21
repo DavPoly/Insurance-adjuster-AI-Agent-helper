@@ -39,7 +39,12 @@ class DecisionModelClient:
         self._api_key = api_key
         self._model = model
         self._endpoint = endpoint
-        self._transport = transport
+        # Reused across calls so repeated requests pool/keep-alive connections
+        # instead of paying a fresh TCP+TLS handshake every time.
+        self._client = httpx.AsyncClient(
+            transport=transport,
+            timeout=DECISION_REQUEST_TIMEOUT_SECONDS,
+        )
 
     async def decide(self, state: object, questions: dict[str, dict]) -> dict[str, dict]:
         """Score every question against ``state``; return answers keyed by question id.
@@ -56,13 +61,13 @@ class DecisionModelClient:
             _AUTHORIZATION_HEADER: f"{_BEARER_TOKEN_PREFIX}{self._api_key}",
             _CONTENT_TYPE_HEADER: _JSON_CONTENT_TYPE,
         }
-        async with httpx.AsyncClient(
-            transport=self._transport,
-            timeout=DECISION_REQUEST_TIMEOUT_SECONDS,
-        ) as http:
-            response = await http.post(self._endpoint, json=request_body, headers=headers)
-            response.raise_for_status()
-            return response.json().get(_ANSWERS_FIELD, {})
+        response = await self._client.post(self._endpoint, json=request_body, headers=headers)
+        response.raise_for_status()
+        return response.json().get(_ANSWERS_FIELD, {})
+
+    async def aclose(self) -> None:
+        """Release the pooled connections; the client cannot send requests afterwards."""
+        await self._client.aclose()
 
 
 def noul_answer_is_yes(answers: dict, question_id: str) -> bool:

@@ -12,7 +12,7 @@ from app.constants.api.unexpected_error_response import (
     UNEXPECTED_ERROR_CODE,
     UNEXPECTED_ERROR_MESSAGE,
 )
-from app.dependencies import get_qdrant_client
+from app.dependencies import get_decision_model_client, get_qdrant_client
 from app.rag.vector_db_readiness import wait_for_vector_db_ready
 from app.routers import health, triage
 from app.routers.triage_exceptions import IntakeValidationFailed, SafetyCheckFailed
@@ -29,6 +29,8 @@ async def lifespan(app: FastAPI):
     else:
         logger.error("Vector DB did not become ready; /health will report it as disconnected.")
     yield
+    await get_decision_model_client().aclose()
+    get_decision_model_client.cache_clear()
 
 
 app = FastAPI(
