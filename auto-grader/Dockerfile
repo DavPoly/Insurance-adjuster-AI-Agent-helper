@@ -13,6 +13,5 @@ RUN pip install --no-cache-dir \
 COPY tests/ /app/tests/
 COPY conftest.py /app/conftest.py
 COPY grade.py /app/grade.py
-COPY trace_checks.py /app/trace_checks.py
 
 CMD ["python", "grade.py"]
