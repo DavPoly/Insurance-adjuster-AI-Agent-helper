@@ -38,7 +38,7 @@ FAKE_QUESTIONS = {
     FAKE_PROPERTY_DAMAGE_QUESTION_ID: {"type": "noul"},
     FAKE_DAMAGE_TYPE_QUESTION_ID: {
         "type": "choice",
-        "criteria": ["water_damage", "fire_damage"],
+        "criteria": {"water_damage": "water_damage", "fire_damage": "fire_damage"},
     },
 }
 

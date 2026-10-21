@@ -125,14 +125,14 @@ CLAIM_DECISION_QUESTIONS: dict[str, dict] = {
         "instructions": (
             "Classify the primary cause of the property damage into exactly one damage type."
         ),
-        "criteria": [damage_type.value for damage_type in DamageType],
+        "criteria": {damage_type.value: damage_type.value for damage_type in DamageType},
     },
     SEVERITY_QUESTION_ID: {
         "type": CHOICE_QUESTION_TYPE,
         "instructions": (
             f"Classify the physical extent of the damage. {SEVERITY_CLASSIFICATION_RUBRIC}"
         ),
-        "criteria": [severity.value for severity in SeverityLevel],
+        "criteria": {severity.value: severity.value for severity in SeverityLevel},
     },
     **{affected_area_question_id(area): _area_question(area) for area in AFFECTED_AREA_VOCABULARY},
 }

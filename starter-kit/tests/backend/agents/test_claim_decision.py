@@ -318,12 +318,12 @@ def test_describe_claim_decision_failure_maps_each_intake_gate(
 
 
 def test_damage_type_and_severity_choice_criteria_are_derived_from_the_enums():
-    assert CLAIM_DECISION_QUESTIONS[DAMAGE_TYPE_QUESTION_ID]["criteria"] == [
-        damage_type.value for damage_type in DamageType
-    ]
-    assert CLAIM_DECISION_QUESTIONS[SEVERITY_QUESTION_ID]["criteria"] == [
-        severity.value for severity in SeverityLevel
-    ]
+    assert CLAIM_DECISION_QUESTIONS[DAMAGE_TYPE_QUESTION_ID]["criteria"] == {
+        damage_type.value: damage_type.value for damage_type in DamageType
+    }
+    assert CLAIM_DECISION_QUESTIONS[SEVERITY_QUESTION_ID]["criteria"] == {
+        severity.value: severity.value for severity in SeverityLevel
+    }
 
 
 def test_every_vocabulary_area_has_one_noul_question():
