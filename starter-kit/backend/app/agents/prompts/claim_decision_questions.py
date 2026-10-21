@@ -47,10 +47,23 @@ def _area_question(area: str) -> dict:
     area_label = area.replace("_", " ")
     return {
         "type": NOUL_QUESTION_TYPE,
-        "instructions": (f"Does the damage affect the {area_label}? {AREA_COUNTING_RULE}"),
+        "instructions": (
+            f"Does the evidence directly show or explicitly state that the {area_label} "
+            f"itself is damaged? Require specific, direct evidence for this exact area — a "
+            f"photo showing it, or text that names it as damaged — not mere proximity to, "
+            f"or topical association with, another damaged area. If the {area_label} is not "
+            f"mentioned or shown, or is described as dry or unaffected, answer no. "
+            f"{AREA_COUNTING_RULE}"
+        ),
         "criteria": {
-            NOUL_YES_CRITERION: f"The damage physically affects the {area_label}.",
-            NOUL_NO_CRITERION: f"The damage does not affect the {area_label}.",
+            NOUL_YES_CRITERION: (
+                f"The evidence directly shows or explicitly states that the {area_label} "
+                f"itself is damaged."
+            ),
+            NOUL_NO_CRITERION: (
+                f"The {area_label} is not mentioned or shown as damaged, or is explicitly "
+                f"described as dry or unaffected."
+            ),
         },
     }
 
