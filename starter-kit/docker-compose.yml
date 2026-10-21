@@ -24,6 +24,8 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
       - LLM_MODEL=${LLM_MODEL}
+      - DECISION_MODEL=${DECISION_MODEL}
+      - DECISION_ENDPOINT=${DECISION_ENDPOINT}
       - QDRANT_URL=http://qdrant:6333
       - TOOLS_DIR=/app/tools
     depends_on:
