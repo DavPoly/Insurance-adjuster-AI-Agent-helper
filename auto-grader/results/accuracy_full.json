@@ -5,189 +5,189 @@
   "expected": 35,
   "returned": 35,
   "failed": 0,
-  "p50_attempt_ms": 18490.4,
-  "p50_returned_ms": 18490.4,
+  "p50_attempt_ms": 5419.4,
+  "p50_returned_ms": 5419.4,
   "metrics": {
-    "damage": 0.9714285714285714,
-    "severity": 0.8142857142857143,
-    "cost": 0.6370101389838232
+    "damage": 0.9142857142857143,
+    "severity": 0.8714285714285714,
+    "cost": 0.6538838938838939
   },
   "note": "Client end-to-end timings include application, models, tools and network. Smoke is not a full grade.",
   "cases": {
     "IMG_001": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 19042.5
+      "duration_ms": 5307.7
     },
     "IMG_002": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18790.4
+      "duration_ms": 5033.4
     },
     "IMG_003": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17699.8
+      "duration_ms": 5449.2
     },
     "IMG_004": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17401.4
+      "duration_ms": 5581.7
     },
     "IMG_005": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 16517.9
+      "duration_ms": 5981.5
     },
     "IMG_006": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 22174.6
+      "duration_ms": 5255.3
     },
     "IMG_007": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 20993.4
+      "duration_ms": 5013.8
     },
     "IMG_008": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18908.2
+      "duration_ms": 4768.6
     },
     "IMG_009": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 20599.7
+      "duration_ms": 5499.3
     },
     "IMG_010": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17294.1
+      "duration_ms": 5827.8
     },
     "IMG_011": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17954.0
+      "duration_ms": 4494.6
     },
     "IMG_012": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 19632.2
+      "duration_ms": 6055.0
     },
     "IMG_013": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17489.4
+      "duration_ms": 5058.4
     },
     "IMG_014": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18893.2
+      "duration_ms": 5088.3
     },
     "IMG_015": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 22181.3
+      "duration_ms": 5148.2
     },
     "IMG_016": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18020.6
+      "duration_ms": 5607.8
     },
     "IMG_017": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 16654.3
+      "duration_ms": 4941.4
     },
     "IMG_018": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18490.4
+      "duration_ms": 5864.6
     },
     "IMG_019": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17954.3
+      "duration_ms": 5799.5
     },
     "IMG_020": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18070.9
+      "duration_ms": 5263.9
     },
     "IMG_021": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 16989.3
+      "duration_ms": 6254.9
     },
     "IMG_022": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18540.6
+      "duration_ms": 6222.6
     },
     "IMG_023": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17579.9
+      "duration_ms": 5434.5
     },
     "IMG_024": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18862.0
+      "duration_ms": 5343.0
     },
     "IMG_025": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 15778.8
+      "duration_ms": 6260.9
     },
     "IMG_026": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17379.6
+      "duration_ms": 5622.7
     },
     "IMG_027": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 17645.0
+      "duration_ms": 5778.9
     },
     "IMG_028": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 19871.8
+      "duration_ms": 5414.2
     },
     "IMG_029": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 39694.3
+      "duration_ms": 5363.7
     },
     "IMG_030": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 16968.4
+      "duration_ms": 5241.2
     },
     "IMG_031": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 20025.8
+      "duration_ms": 5852.0
     },
     "IMG_032": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18923.3
+      "duration_ms": 5093.7
     },
     "IMG_033": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 18623.6
+      "duration_ms": 5210.7
     },
     "IMG_034": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 16276.5
+      "duration_ms": 5960.8
     },
     "IMG_035": {
       "status": "returned",
       "http_status": 200,
-      "duration_ms": 21556.6
+      "duration_ms": 5419.4
     }
   }
 }
